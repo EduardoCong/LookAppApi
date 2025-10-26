@@ -22,4 +22,9 @@ export class StoresController {
     findAll() {
         return this.service.findAll();
     }
+
+    @Get('with-products')
+    getStoreWithProducts() {
+        return this.service.getStorewithProducts();
+    }
 }

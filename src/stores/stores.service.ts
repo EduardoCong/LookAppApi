@@ -45,4 +45,8 @@ export class StoresService {
     findAll(): Promise<Store[]> {
         return this.storeRepo.find({ relations: ['user', 'category'] });
     }
+
+    getStorewithProducts(): Promise<Store[]> {
+        return this.storeRepo.find({ relations: ['products'] });
+    }
 }
