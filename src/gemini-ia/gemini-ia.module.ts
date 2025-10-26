@@ -7,5 +7,6 @@ import { ConfigModule } from '@nestjs/config';
   imports: [ConfigModule],
   controllers: [GeminiIaController],
   providers: [GeminiIaService],
+  exports: [GeminiIaService],
 })
-export class GeminiIaModule {}
+export class GeminiIaModule { }
