@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Store } from './entities/store.entity';
-import { CreateStoreDto } from './dto/create-store.dto';
+import { CreateStoreDto, UpdateStoreDto } from './dto/create-store.dto';
 
 
 import { Category } from 'src/categories/entities/category.entity';
@@ -49,4 +49,52 @@ export class StoresService {
     getStorewithProducts(): Promise<Store[]> {
         return this.storeRepo.find({ relations: ['products'] });
     }
+
+    async findOne(id: number): Promise<Store> {
+        const store = await this.storeRepo.findOne({
+            where: { id },
+            relations: ['user', 'category', 'products'],
+        });
+
+        if (!store) {
+            throw new NotFoundException(`La tienda con ID ${id} no existe`);
+        }
+
+        return store;
+    }
+
+    async update(id: number, dto: UpdateStoreDto): Promise<Store> {
+        const store = await this.storeRepo.findOne({ where: { id }, relations: ['user', 'category'] });
+
+        if (!store) {
+            throw new NotFoundException(`La tienda con ID ${id} no existe`);
+        }
+
+        // Si envía un nuevo usuario
+        if (dto.user_id) {
+            const user = await this.userRepo.findOne({ where: { id: dto.user_id } });
+            if (!user) throw new NotFoundException(`El usuario con ID ${dto.user_id} no existe`);
+            store.user = user;
+        }
+
+        // Si envía una nueva categoría
+        if (dto.category_id) {
+            const category = await this.categoryRepo.findOne({ where: { id: dto.category_id } });
+            if (!category) throw new NotFoundException(`La categoría con ID ${dto.category_id} no existe`);
+            store.category = category;
+        }
+
+        Object.assign(store, dto);
+
+        return this.storeRepo.save(store);
+    }
+
+    async remove(id: number): Promise<void> {
+        const store = await this.storeRepo.findOne({ where: { id } });
+        if (!store) {
+            throw new NotFoundException(`La tienda con ID ${id} no existe`);
+        }
+        await this.storeRepo.remove(store);
+    }
+
 }
