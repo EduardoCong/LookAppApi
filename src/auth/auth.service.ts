@@ -36,13 +36,34 @@ export class AuthService {
             status: 'success',
             access_token: token,
             token_type: 'Bearer',
-            expires_in: 60 * 60 * 24 * 7, // 7 días
-            // user: {
-            //     id: user.id,
-            //     email: user.email,
-            //     name: user.name,
-            //     role: user.role,
-            // },
+            expires_in: 60 * 60 * 24 * 7,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+            },
         };
+    }
+
+    async profile(token: string) {
+        try {
+            const decoded = this.jwtService.verify(token.replace('Bearer ', ''));
+            const user = await this.usersService.findOne(decoded.sub);
+            if (!user) throw new UnauthorizedException('Token inválido');
+
+            return {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            };
+        } catch {
+            throw new UnauthorizedException('Token expirado o inválido');
+        }
+    }
+
+    async logout() {
+        return { status: 'success', message: 'Sesión cerrada correctamente' };
     }
 }
