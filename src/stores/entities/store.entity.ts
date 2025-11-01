@@ -20,15 +20,22 @@ export class Store {
     @Column({ type: 'text', nullable: true })
     map_url: string;
 
+    @Column({ length: 150, nullable: true })
+    longitude: string;
+
+    @Column({ length: 150, nullable: true })
+    latitude: string;
+
     @Column({ type: 'text', nullable: true })
     description: string;
 
     @Column({ default: true })
     is_verified: boolean;
 
-    @OneToOne(() => User)
+    @OneToOne(() => User, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'user_id' })
     user: User;
+
 
     @ManyToOne(() => Category, (category) => category.stores)
     @JoinColumn({ name: 'category_id' })

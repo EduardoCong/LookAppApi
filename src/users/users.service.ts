@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -37,6 +37,39 @@ export class UsersService {
                 'role',
             ],
         });
+    }
+
+    async update(id: number, dto: UpdateUserDto): Promise<User> {
+        const user = await this.userRepo.findOne({ where: { id } });
+
+        if (!user) {
+            throw new NotFoundException(`El usuario con ID ${id} no existe`);
+        }
+
+
+        if (dto.email && dto.email !== user.email) {
+            const emailExists = await this.userRepo.findOne({ where: { email: dto.email } });
+            if (emailExists) {
+                throw new Error(`El correo ${dto.email} ya está registrado por otro usuario`);
+            }
+        }
+
+        if (dto.password) {
+            dto.password = await bcrypt.hash(dto.password, 10);
+        }
+
+        Object.assign(user, dto);
+
+        return this.userRepo.save(user);
+    }
+
+
+    async remove(id: number): Promise<void> {
+        const user = await this.userRepo.findOne({ where: { id } });
+        if (!user) {
+            throw new NotFoundException(`El usuario con ID ${id} no existe`);
+        }
+        await this.userRepo.remove(user);
     }
 
 }
