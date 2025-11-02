@@ -1,7 +1,24 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, JoinColumn, OneToMany } from 'typeorm';
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    ManyToOne,
+    OneToOne,
+    JoinColumn,
+    OneToMany,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Category } from 'src/categories/entities/category.entity';
-import { Product } from 'src/products/entities/product.entity';
+import { Category } from 'src/modules/categories/entities/category.entity';
+import { Product } from 'src/modules/products/entities/product.entity';
+import { StoreDetail } from './store-detail.entity';
+import { StoreReviewLog } from 'src/modules/web-admin/stores/entities/store-review-log.entity';
+
+// 🔹 Definición de estados posibles
+export enum StoreStatus {
+    PENDING = 'pending',
+    ACTIVE = 'active',
+    REJECTED = 'rejected',
+}
 
 @Entity('stores')
 export class Store {
@@ -29,6 +46,14 @@ export class Store {
     @Column({ type: 'text', nullable: true })
     description: string;
 
+    // 🔹 Nuevo campo de estado
+    @Column({
+        type: 'enum',
+        enum: StoreStatus,
+        default: StoreStatus.PENDING,
+    })
+    status: StoreStatus;
+
     @Column({ default: true })
     is_verified: boolean;
 
@@ -36,11 +61,18 @@ export class Store {
     @JoinColumn({ name: 'user_id' })
     user: User;
 
-
     @ManyToOne(() => Category, (category) => category.stores)
     @JoinColumn({ name: 'category_id' })
     category: Category;
 
     @OneToMany(() => Product, (product) => product.store)
     products: Product[];
+
+    @OneToOne(() => StoreDetail, (detail) => detail.store, { cascade: true })
+    detail: StoreDetail;
+
+    @OneToMany(() => StoreReviewLog, (log) => log.store)
+    reviewLogs: StoreReviewLog[];
+
+
 }

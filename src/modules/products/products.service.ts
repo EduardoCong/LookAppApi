@@ -3,12 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { CreateProductDto, UpdateProductDto } from './dto/create-product.dto';
-import { Store } from 'src/stores/entities/store.entity';
-import { ProductCategory } from 'src/product-categories/entities/product-category.entity';
+
+import { ProductCategory } from 'src/modules/product-categories/entities/product-category.entity';
 import path from 'path';
 import * as fs from 'fs';
-import { GeminiIaService } from 'src/gemini-ia/gemini-ia.service';
+import { GeminiIaService } from 'src/modules/gemini-ia/gemini-ia.service';
 import { ConfigService } from '@nestjs/config';
+import { Store } from '../stores/entities/store.entity';
 
 @Injectable()
 export class ProductsService {

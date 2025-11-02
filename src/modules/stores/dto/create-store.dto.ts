@@ -1,5 +1,6 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsInt } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsInt, IsEnum } from 'class-validator';
+import { StoreStatus } from '../entities/store.entity';
 
 export class CreateStoreDto {
     @ApiProperty({
@@ -25,7 +26,6 @@ export class CreateStoreDto {
 
     @ApiProperty({
         example: 'https://goo.gl/maps/example',
-        description: 'URL del mapa de la ubicación (opcional).',
         required: false,
     })
     @IsOptional()
@@ -33,23 +33,20 @@ export class CreateStoreDto {
 
     @ApiProperty({
         example: '-89.6170',
-        description: 'Longitud geográfica de la ubicación de la tienda (opcional).',
-        required: false,
+        description: 'Longitud geográfica.',
     })
-    @IsNotEmpty()
+    @IsOptional()
     longitude?: string;
 
     @ApiProperty({
         example: '20.9678',
-        description: 'Latitud geográfica de la ubicación de la tienda (opcional).',
-        required: false,
+        description: 'Latitud geográfica.',
     })
-    @IsNotEmpty()
+    @IsOptional()
     latitude?: string;
 
     @ApiProperty({
         example: 'Tienda de productos ecológicos y orgánicos.',
-        description: 'Breve descripción de la tienda.',
         required: false,
     })
     @IsOptional()
@@ -68,6 +65,15 @@ export class CreateStoreDto {
     })
     @IsInt()
     category_id: number;
+
+    @ApiProperty({
+        example: 'pending',
+        enum: StoreStatus,
+        required: false,
+    })
+    @IsOptional()
+    @IsEnum(StoreStatus)
+    status?: StoreStatus;
 }
 
 export class UpdateStoreDto extends PartialType(CreateStoreDto) { }

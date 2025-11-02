@@ -1,4 +1,4 @@
-import { Store } from 'src/stores/entities/store.entity';
+import { Store } from 'src/modules/stores/entities/store.entity';
 import { Entity, PrimaryGeneratedColumn, Column, OneToOne, CreateDateColumn } from 'typeorm';
 
 
