@@ -57,6 +57,7 @@ export class CreateStoreDto {
         description: 'ID del usuario propietario (debe existir en la tabla users).',
     })
     @IsInt()
+    @IsOptional()
     user_id: number;
 
     @ApiProperty({
