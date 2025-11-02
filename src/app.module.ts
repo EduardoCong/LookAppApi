@@ -2,14 +2,16 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
-import { GeminiIaModule } from './gemini-ia/gemini-ia.module';
+import { GeminiIaModule } from './modules/gemini-ia/gemini-ia.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { UsersModule } from './users/users.module';
-import { StoresModule } from './stores/stores.module';
-import { CategoriesModule } from './categories/categories.module';
-import { AuthModule } from './auth/auth.module';
-import { ProductsModule } from './products/products.module';
-import { ProductCategoriesModule } from './product-categories/product-categories.module';
+import { UsersModule } from './modules/users/users.module';
+
+import { CategoriesModule } from './modules/categories/categories.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { ProductsModule } from './modules/products/products.module';
+import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
+import { StoresModule } from './modules/stores/stores.module';
+import { AdminStoresModule } from './modules/web-admin/stores/admin-stores.module';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { ProductCategoriesModule } from './product-categories/product-categories
     StoresModule,
     ProductCategoriesModule,
     ProductsModule,
+    AdminStoresModule,
     GeminiIaModule,
 
   ],
