@@ -12,7 +12,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { StoresModule } from './modules/stores/stores.module';
 import { AdminStoresModule } from './modules/web-admin/stores/admin-stores.module';
-import { WebStoresModule } from './modules/web/stores/web-stores.module';
+import { WebStoresModule } from './modules/web/superadmin/stores/web-stores.module';
 
 @Module({
   imports: [
@@ -27,7 +27,8 @@ import { WebStoresModule } from './modules/web/stores/web-stores.module';
       synchronize: true,
       ssl: true,
     }),
-    AuthModule,
+    AuthModule, //Auth Global
+    WebStoresModule, //Endpoints para superadmin
     CategoriesModule,
     UsersModule,
     StoresModule,
@@ -35,7 +36,6 @@ import { WebStoresModule } from './modules/web/stores/web-stores.module';
     ProductsModule,
     AdminStoresModule,
     GeminiIaModule,
-    WebStoresModule
   ],
   controllers: [AppController],
   providers: [AppService],
