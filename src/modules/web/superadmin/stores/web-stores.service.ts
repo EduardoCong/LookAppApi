@@ -24,29 +24,54 @@ export class WebStoresService {
 
     async registerWithStripe(body: any) {
         const {
+            // Datos de usuario (se aceptan ambas variantes)
+            name,
             user_name,
+            email,
             user_email,
             password,
+            phone,
+            username,
+            role,
+
+            // Datos de tienda
             business_name,
+            owner_name,
+            address,
+            map_url,
+            longitude,
+            latitude,
+            description,
             category_id,
+            status,
+
+            // Stripe
             plan_id,
             payment_method_id,
         } = body;
 
+        const finalName = name || user_name;
+        const finalEmail = email || user_email;
+
         try {
             if (
-                !user_name ||
-                !user_email ||
+                !finalName ||
+                !finalEmail ||
                 !password ||
                 !business_name ||
+                !owner_name ||
+                !address ||
                 !category_id ||
                 !plan_id ||
                 !payment_method_id
             ) {
-                throw new HttpException('Faltan campos obligatorios.', HttpStatus.BAD_REQUEST);
+                throw new HttpException(
+                    'Faltan campos obligatorios.',
+                    HttpStatus.BAD_REQUEST,
+                );
             }
 
-            const existingUser = await this.userRepo.findOne({ where: { email: user_email } });
+            const existingUser = await this.userRepo.findOne({ where: { email: finalEmail } });
             if (existingUser) {
                 throw new HttpException(
                     'Este correo ya está registrado. Intente con otro o inicie sesión.',
@@ -55,11 +80,12 @@ export class WebStoresService {
             }
 
             const customer = await this.stripe.customers.create({
-                name: user_name,
-                email: user_email,
+                name: finalName,
+                email: finalEmail,
                 payment_method: payment_method_id,
                 invoice_settings: { default_payment_method: payment_method_id },
             });
+
 
             const subscription = await this.stripe.subscriptions.create({
                 customer: customer.id,
@@ -80,35 +106,45 @@ export class WebStoresService {
                 );
             }
 
-
-            const user = this.userRepo.create({
-                name: user_name,
-                email: user_email,
+            const newUser = this.userRepo.create({
+                name: finalName,
+                email: finalEmail,
                 password,
-                role: UserRole.STORE,
+                phone,
+                username,
+                role: role || UserRole.STORE,
             });
-            const savedUser = await this.userRepo.save(user);
+            const savedUser = await this.userRepo.save(newUser);
 
-            const store = this.storeRepo.create({
+            const newStore = this.storeRepo.create({
                 business_name,
-                owner_name: body.owner_name,
-                address: body.address,
+                owner_name,
+                address,
+                map_url,
+                longitude,
+                latitude,
+                description,
                 category: { id: category_id },
                 user: savedUser,
-                status: StoreStatus.PENDING,
+                status: (status as StoreStatus) || StoreStatus.PENDING,
                 is_verified: false,
             });
-            await this.storeRepo.save(store);
+
+            const savedStore = await this.storeRepo.save(newStore);
+            savedUser.store = savedStore;
+            await this.userRepo.save(savedUser);
 
             return {
                 statusCode: HttpStatus.CREATED,
-                message: 'Tienda registrada y suscripción Stripe creada correctamente.',
+                message: 'Usuario, tienda y suscripción Stripe creados correctamente.',
                 data: {
-                    stripe_customer: customer.id,
-                    stripe_subscription: subscription.id,
-                    invoice_status: invoiceStatus,
-                    subscription_status: subscriptionStatus,
-                    pdf: invoicePdfUrl
+                    stripe: {
+                        customer_id: customer.id,
+                        subscription_id: subscription.id,
+                        invoice_status: invoiceStatus,
+                        subscription_status: subscriptionStatus,
+                        invoice_pdf: invoicePdfUrl,
+                    },
                 },
             };
         } catch (error: any) {

@@ -5,13 +5,13 @@ import { RegisterStoreDto } from './dto/register-store.dto';
 import { Public } from 'src/common/decorators/public.decorator';
 import { AuthGuard } from '@nestjs/passport';
 
-@ApiTags('SuperAdmin')
+@ApiTags('Tiendas - Usuario - Stripe')
 @Controller('web/stores')
 export class WebStoresController {
     constructor(private readonly service: WebStoresService) { }
 
     @Public()
-    @Post('register/public')
+    @Post('create-account')
     @ApiBody({ type: RegisterStoreDto })
     async register(@Body() body: RegisterStoreDto) {
         const { plan_id, payment_method_id } = body;
