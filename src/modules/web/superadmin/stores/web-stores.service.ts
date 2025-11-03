@@ -8,6 +8,9 @@ import { User, UserRole } from 'src/modules/users/entities/user.entity';
 import { StoreDetail } from 'src/modules/stores/entities/store-detail.entity';
 import * as bcrypt from 'bcryptjs';
 import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
+import { PosSale } from '../../admin-store/pos/entities/pos-sale.entity';
+import { PosStock } from '../../admin-store/pos/entities/pos-stock.entity';
+import { faker } from '@faker-js/faker';
 
 @Injectable()
 export class WebStoresService {
@@ -19,13 +22,18 @@ export class WebStoresService {
         @InjectRepository(StoreDetail) private readonly detailRepo: Repository<StoreDetail>,
         @InjectRepository(StoreSubscription)
         private readonly subRepo: Repository<StoreSubscription>,
+
+        @InjectRepository(PosSale)
+        private readonly saleRepo: Repository<PosSale>,
+        @InjectRepository(PosStock)
+        private readonly stockRepo: Repository<PosStock>,
+
         private readonly configService: ConfigService,
     ) {
         this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY')!, {
             apiVersion: '2025-10-29.clover',
         });
     }
-
     async registerWithStripe(body: any) {
         const {
             // Datos de usuario (se aceptan ambas variantes)
@@ -166,6 +174,7 @@ export class WebStoresService {
             });
 
             await this.subRepo.save(subscriptionRecord);
+            await this.initializePosForStore(savedStore.id);
 
             return {
                 statusCode: HttpStatus.CREATED,
@@ -244,5 +253,56 @@ export class WebStoresService {
             default:
                 throw new HttpException('Plan inválido o no configurado.', HttpStatus.BAD_REQUEST);
         }
+    }
+
+    /**
+    * Inicializa datos de POS (stock + ventas fake) para una tienda nueva
+    */
+    private async initializePosForStore(storeId: number) {
+        const store = await this.storeRepo.findOne({ where: { id: storeId } });
+        if (!store) {
+            console.warn(`⚠️ No se encontró tienda con id ${storeId}, se omite el seed POS.`);
+            return;
+        }
+
+        const products = Array.from({ length: 10 }).map(() => ({
+            productId: faker.number.int({ min: 1000, max: 9999 }),
+            productName: faker.commerce.productName(),
+            quantity: faker.number.int({ min: 0, max: 100 }),
+            cost: parseFloat(faker.commerce.price({ min: 10, max: 300 })),
+        }));
+
+        for (const p of products) {
+            await this.stockRepo.save(
+                this.stockRepo.create({
+                    store,
+                    productId: p.productId,
+                    productName: p.productName,
+                    quantity: p.quantity,
+                    cost: p.cost,
+                }),
+            );
+        }
+
+        for (let i = 0; i < 100; i++) {
+            const prod = faker.helpers.arrayElement(products);
+            const qty = faker.number.int({ min: 1, max: 5 });
+            const price = parseFloat(faker.commerce.price({ min: 50, max: 500 }));
+            const createdAt = faker.date.recent({ days: 14 });
+
+            await this.saleRepo.save(
+                this.saleRepo.create({
+                    store,
+                    productId: prod.productId,
+                    productName: prod.productName,
+                    price,
+                    quantity: qty,
+                    total: +(price * qty).toFixed(2),
+                    createdAt,
+                }),
+            );
+        }
+
+        console.log(`✅ POS inicializado para la tienda ID ${storeId}`);
     }
 }
