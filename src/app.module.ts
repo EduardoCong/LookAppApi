@@ -13,6 +13,7 @@ import { ProductCategoriesModule } from './modules/product-categories/product-ca
 import { StoresModule } from './modules/stores/stores.module';
 import { AdminStoresModule } from './modules/web-admin/stores/admin-stores.module';
 import { WebStoresModule } from './modules/web/superadmin/stores/web-stores.module';
+import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { WebStoresModule } from './modules/web/superadmin/stores/web-stores.modu
     ProductsModule,
     AdminStoresModule,
     GeminiIaModule,
+    StoreStatsModule
   ],
   controllers: [AppController],
   providers: [AppService],

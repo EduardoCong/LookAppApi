@@ -12,6 +12,7 @@ import { Category } from 'src/modules/categories/entities/category.entity';
 import { Product } from 'src/modules/products/entities/product.entity';
 import { StoreDetail } from './store-detail.entity';
 import { StoreReviewLog } from 'src/modules/web-admin/stores/entities/store-review-log.entity';
+import { StoreSubscription } from './store-subscription.entity';
 
 // 🔹 Definición de estados posibles
 export enum StoreStatus {
@@ -46,7 +47,6 @@ export class Store {
     @Column({ type: 'text', nullable: true })
     description: string;
 
-    // 🔹 Nuevo campo de estado
     @Column({
         type: 'enum',
         enum: StoreStatus,
@@ -74,5 +74,7 @@ export class Store {
     @OneToMany(() => StoreReviewLog, (log) => log.store)
     reviewLogs: StoreReviewLog[];
 
+    @OneToMany(() => StoreSubscription, (sub) => sub.store)
+    subscriptions: StoreSubscription[];
 
 }
