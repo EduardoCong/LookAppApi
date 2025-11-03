@@ -6,10 +6,11 @@ import { PosSale } from 'src/modules/web/admin-store/pos/entities/pos-sale.entit
 import { PosStock } from 'src/modules/web/admin-store/pos/entities/pos-stock.entity';
 import { Product } from 'src/modules/products/entities/product.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
+import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store]),
+        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription]),
     ],
     controllers: [StoreStatsController],
     providers: [StoreStatsService],

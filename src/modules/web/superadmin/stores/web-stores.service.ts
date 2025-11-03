@@ -6,6 +6,8 @@ import { ConfigService } from '@nestjs/config';
 import { Store, StoreStatus } from 'src/modules/stores/entities/store.entity';
 import { User, UserRole } from 'src/modules/users/entities/user.entity';
 import { StoreDetail } from 'src/modules/stores/entities/store-detail.entity';
+import * as bcrypt from 'bcryptjs';
+import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
 
 @Injectable()
 export class WebStoresService {
@@ -15,6 +17,8 @@ export class WebStoresService {
         @InjectRepository(Store) private readonly storeRepo: Repository<Store>,
         @InjectRepository(User) private readonly userRepo: Repository<User>,
         @InjectRepository(StoreDetail) private readonly detailRepo: Repository<StoreDetail>,
+        @InjectRepository(StoreSubscription)
+        private readonly subRepo: Repository<StoreSubscription>,
         private readonly configService: ConfigService,
     ) {
         this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY')!, {
@@ -79,6 +83,8 @@ export class WebStoresService {
                 );
             }
 
+            const hashedPassword = await bcrypt.hash(password, 10);
+
             const customer = await this.stripe.customers.create({
                 name: finalName,
                 email: finalEmail,
@@ -109,7 +115,7 @@ export class WebStoresService {
             const newUser = this.userRepo.create({
                 name: finalName,
                 email: finalEmail,
-                password,
+                password: hashedPassword,
                 phone,
                 username,
                 role: role || UserRole.STORE,
@@ -133,6 +139,33 @@ export class WebStoresService {
             const savedStore = await this.storeRepo.save(newStore);
             savedUser.store = savedStore;
             await this.userRepo.save(savedUser);
+
+            const subData = subscription as any;
+
+            const current_period_start =
+                subData.latest_invoice?.period_start
+                    ? new Date(subData.latest_invoice.period_start * 1000)
+                    : subData.start_date
+                        ? new Date(subData.start_date * 1000)
+                        : null;
+
+            const current_period_end =
+                subData.latest_invoice?.period_end
+                    ? new Date(subData.latest_invoice.period_end * 1000)
+                    : null;
+
+            const subscriptionRecord = this.subRepo.create({
+                ...({ store: { id: savedStore.id } } as any),
+                stripe_customer_id: customer.id,
+                stripe_subscription_id: subData.id,
+                price_id: this.getPriceId(plan_id),
+                plan_key: plan_id,
+                status: subData.status,
+                current_period_start,
+                current_period_end,
+            });
+
+            await this.subRepo.save(subscriptionRecord);
 
             return {
                 statusCode: HttpStatus.CREATED,

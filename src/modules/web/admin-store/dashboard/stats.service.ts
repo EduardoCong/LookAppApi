@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { PosSale } from 'src/modules/web/admin-store/pos/entities/pos-sale.entity';
@@ -6,6 +6,7 @@ import { PosStock } from 'src/modules/web/admin-store/pos/entities/pos-stock.ent
 import { subDays, startOfDay } from 'date-fns';
 import { Product } from 'src/modules/products/entities/product.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
+import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
 
 @Injectable()
 export class StoreStatsService {
@@ -21,6 +22,9 @@ export class StoreStatsService {
 
         @InjectRepository(Store)
         private readonly storeRepo: Repository<Store>,
+
+        @InjectRepository(StoreSubscription)
+        private readonly subRepo: Repository<StoreSubscription>,
     ) { }
 
     async getStatsForStore(storeId: number) {
@@ -166,6 +170,28 @@ export class StoreStatsService {
 
         // En cualquier otro caso, acceso denegado
         throw new Error('Rol no autorizado para acceder a productos.');
+    }
+
+    async getSubscriptionDetail(storeId: number) {
+        const subscription = await this.subRepo.findOne({
+            where: { store: { id: storeId } },
+            order: { created_at: 'DESC' },
+        });
+
+        if (!subscription) {
+            throw new HttpException('No se encontró suscripción activa para esta tienda.', HttpStatus.NOT_FOUND);
+        }
+
+        return {
+            plan: subscription.plan_key,
+            price_id: subscription.price_id,
+            stripe_subscription_id: subscription.stripe_subscription_id,
+            stripe_customer_id: subscription.stripe_customer_id,
+            status: subscription.status,
+            current_period_start: subscription.current_period_start,
+            current_period_end: subscription.current_period_end,
+            created_at: subscription.created_at,
+        };
     }
 
 }

@@ -112,4 +112,46 @@ export class StoreStatsController {
             };
         }
     }
+
+    @ApiBearerAuth()
+    @ApiTags('Dashboard - Suscripción')
+    @Get('mine/subscription')
+    async myStoreSubscription(@Req() req: Request) {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                return {
+                    ok: false,
+                    error: 'No authorization header provided',
+                };
+            }
+
+            const token = authHeader.replace('Bearer ', '').trim();
+            if (!token) {
+                return {
+                    ok: false,
+                    error: 'Invalid token format',
+                };
+            }
+
+            const decoded: any = jwt.verify(token, this.jwtSecret);
+            console.log('Decoded token for subscription:', decoded);
+
+            const storeId =
+                decoded.storeId ??
+                decoded.defaultStoreId ??
+                decoded.user?.store?.id ??
+                decoded.stores?.[0]?.id;
+
+            if (!storeId)
+                return { ok: false, error: 'No store linked to user' };
+
+            const subscription = await this.statsService.getSubscriptionDetail(storeId);
+
+            return { ok: true, data: subscription };
+        } catch (err: any) {
+            console.error('Error decoding token or fetching subscription:', err.message);
+            return { ok: false, error: 'Unauthorized or invalid token' };
+        }
+    }
 }
