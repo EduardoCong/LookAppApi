@@ -7,6 +7,7 @@ import { subDays, startOfDay } from 'date-fns';
 import { Product } from 'src/modules/products/entities/product.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
 import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
+import { User } from 'src/modules/users/entities/user.entity';
 
 @Injectable()
 export class StoreStatsService {
@@ -25,6 +26,9 @@ export class StoreStatsService {
 
         @InjectRepository(StoreSubscription)
         private readonly subRepo: Repository<StoreSubscription>,
+
+        @InjectRepository(User)
+        private readonly userRepo: Repository<User>,
     ) { }
 
     async getStatsForStore(storeId: number) {
@@ -193,5 +197,64 @@ export class StoreStatsService {
             created_at: subscription.created_at,
         };
     }
+
+
+    async getProfileWithStore(userId: number) {
+
+        if (!userId) {
+            throw new HttpException('Falta el ID del usuario autenticado.', HttpStatus.BAD_REQUEST);
+        }
+
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            relations: ['store', 'store.category', 'store.detail'],
+        });
+
+        if (!user) {
+            throw new HttpException('Usuario no encontrado.', HttpStatus.NOT_FOUND);
+        }
+
+        if (!user.store) {
+            throw new HttpException('El usuario no tiene una tienda asociada.', HttpStatus.NOT_FOUND);
+        }
+
+        console.log(user);
+
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            username: user.username,
+            created_at: user.created_at,
+            store: {
+                id: user.store.id,
+                business_name: user.store.business_name,
+                owner_name: user.store.owner_name,
+                address: user.store.address,
+                description: user.store.description,
+                status: user.store.status,
+                is_verified: user.store.is_verified,
+                category: user.store.category ? user.store.category.name : null,
+            },
+            detail: user.store.detail ? {
+                id: user.store.detail.id,
+                description: user.store.detail.description,
+                rfc: user.store.detail.rfc,
+                phone: user.store.detail.phone,
+                email_contact: user.store.detail.email_contact,
+                logo_url: user.store.detail.logo_url,
+                cover_image_url: user.store.detail.cover_image_url,
+                opening_hours: user.store.detail.opening_hours,
+                reference: user.store.detail.reference,
+                contact_method: user.store.detail.contact_method,
+                social_links: user.store.detail.social_links,
+                created_at: user.store.detail.created_at,
+                updated_at: user.store.detail.updated_at,
+            } : null
+        };
+    }
+
 
 }

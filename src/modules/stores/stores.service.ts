@@ -80,7 +80,7 @@ export class StoresService {
     async findOne(id: number): Promise<Store> {
         const store = await this.storeRepo.findOne({
             where: { id },
-            relations: ['user', 'category', 'products'],
+            relations: ['user', 'category', 'products', 'detail'],
         });
 
         if (!store) {
