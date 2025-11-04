@@ -72,7 +72,6 @@ async function seed() {
         );
     }
 
-    console.log('✅ Seed POS completado');
     await AppDataSource.destroy();
 }
 

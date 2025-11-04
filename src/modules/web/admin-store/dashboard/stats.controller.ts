@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, HttpStatus, Patch, Post, Req } from '@nestjs/common';
 import { StoreStatsService } from './stats.service';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
@@ -74,7 +74,6 @@ export class StoreStatsController {
             }
 
             const decoded: any = jwt.verify(token, this.jwtSecret);
-            console.log('Decoded token:', decoded);
 
             const storeId =
                 decoded.storeId ??
@@ -130,7 +129,6 @@ export class StoreStatsController {
             }
 
             const decoded: any = jwt.verify(token, this.jwtSecret);
-            console.log('Decoded token for products:', decoded);
 
             const products = await this.statsService.getProductsByRole(decoded);
 
@@ -173,7 +171,6 @@ export class StoreStatsController {
             }
 
             const decoded: any = jwt.verify(token, this.jwtSecret);
-            console.log('Decoded token for subscription:', decoded);
 
             const storeId =
                 decoded.storeId ??
@@ -219,7 +216,6 @@ export class StoreStatsController {
             }
 
             const decoded: any = jwt.verify(token, this.jwtSecret);
-            console.log('Decoded token for subscription:', decoded);
 
 
 
@@ -237,4 +233,101 @@ export class StoreStatsController {
             return { ok: false, error: 'Unauthorized or invalid token' };
         }
     }
+
+    @ApiBearerAuth()
+    @Patch('mine/profile-with-store')
+    @ApiOperation({
+        summary: 'Actualizar perfil del usuario y su tienda',
+        description: `Permite modificar los datos del usuario autenticado (nombre, teléfono, etc.) 
+    y los datos de su tienda (nombre comercial, dirección, descripción, contacto, horarios, etc.).`,
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                userData: {
+                    type: 'object',
+                    description: 'Datos del usuario autenticado',
+                    properties: {
+                        name: { type: 'string', example: 'Carlos Pérez' },
+                        email: { type: 'string', example: 'carlos.perez@example.com' },
+                        phone: { type: 'string', example: '9991234567' },
+                        username: { type: 'string', example: 'carlitospz' },
+                        password: { type: 'string', example: 'NuevaContraseña123*' },
+                    },
+                },
+                storeData: {
+                    type: 'object',
+                    description: 'Datos principales de la tienda vinculada al usuario',
+                    properties: {
+                        business_name: { type: 'string', example: 'Ferretería El Clavo Feliz' },
+                        owner_name: { type: 'string', example: 'Carlos Pérez' },
+                        address: { type: 'string', example: 'Av. Reforma #123, Mérida, Yucatán' },
+                        map_url: { type: 'string', example: 'https://goo.gl/maps/ferreteria-clavo' },
+                        description: { type: 'string', example: 'Venta de herramientas y materiales para construcción.' },
+                        is_verified: { type: 'boolean', example: true },
+                        category_id: { type: 'integer', example: 3 },
+                        longitude: { type: 'string', example: '-89.612345' },
+                        latitude: { type: 'string', example: '20.967123' },
+                        status: { type: 'string', example: 'active' },
+                    },
+                },
+                detailData: {
+                    type: 'object',
+                    description: 'Detalles extendidos de la tienda (tabla store_details)',
+                    properties: {
+                        description: { type: 'string', example: 'Sucursal principal con atención de lunes a sábado.' },
+                        rfc: { type: 'string', example: 'PECA800101AB1' },
+                        phone: { type: 'string', example: '9997654321' },
+                        email_contact: { type: 'string', example: 'contacto@clavofeliz.mx' },
+                        logo_url: { type: 'string', example: 'https://cdn.hub-titan.com/logos/ferreteria.png' },
+                        cover_image_url: { type: 'string', example: 'https://cdn.hub-titan.com/covers/portada.jpg' },
+                        opening_hours: {
+                            type: 'object',
+                            example: {
+                                monday: '09:00-18:00',
+                                tuesday: '09:00-18:00',
+                                saturday: '10:00-14:00',
+                                sunday: 'Cerrado',
+                            },
+                        },
+                        reference: { type: 'string', example: 'Frente al parque principal' },
+                        contact_method: { type: 'string', example: 'Teléfono y WhatsApp' },
+                        social_links: {
+                            type: 'object',
+                            example: {
+                                facebook: 'https://facebook.com/elclavofeliz',
+                                instagram: 'https://instagram.com/elclavofeliz',
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    async updateProfileWithMyStore(@Req() req: Request, @Body() body: any) {
+        try {
+            const token = req.headers.authorization?.replace('Bearer ', '').trim();
+            if (!token) return { ok: false, error: 'Invalid token format' };
+
+            const decoded: any = jwt.verify(token, this.jwtSecret);
+            const userId = decoded.sub;
+
+            if (!userId) return { ok: false, error: 'No se pudo obtener el ID del usuario.' };
+
+            await this.statsService.updateProfileWithStore(userId, body);
+
+            return {
+                ok: true,
+                message: 'Perfil y tienda actualizados correctamente',
+            };
+        } catch (err: any) {
+            console.error('Error updating profile and store:', err.message);
+            return {
+                ok: false,
+                error: 'No se pudo actualizar la información del perfil o tienda',
+            };
+        }
+    }
 }
+

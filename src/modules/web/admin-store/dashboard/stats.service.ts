@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { PosSale } from 'src/modules/web/admin-store/pos/entities/pos-sale.entity';
@@ -8,6 +8,7 @@ import { Product } from 'src/modules/products/entities/product.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
 import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
 import { User } from 'src/modules/users/entities/user.entity';
+import { StoresService } from 'src/modules/stores/stores.service';
 
 @Injectable()
 export class StoreStatsService {
@@ -29,13 +30,16 @@ export class StoreStatsService {
 
         @InjectRepository(User)
         private readonly userRepo: Repository<User>,
+
+
+        private readonly storesService: StoresService,
     ) { }
 
     async getStatsForStore(storeId: number) {
         const today = new Date();
         const last7 = subDays(startOfDay(today), 6);
 
-        // 🔹 Cargar ventas recientes y stock
+
         const sales = await this.salesRepo.find({
             where: { store: { id: storeId }, createdAt: Between(last7, today) },
         });
@@ -44,7 +48,6 @@ export class StoreStatsService {
             where: { store: { id: storeId } },
         });
 
-        // --- Totales generales ---
         const totalSales = sales.length;
         const totalRevenue = sales.reduce(
             (sum, s) => sum + Number(s.total ?? 0),
@@ -57,7 +60,7 @@ export class StoreStatsService {
         );
         const lowStock = stock.filter((s) => Number(s.quantity) < 10).length;
 
-        // --- Productos más y menos vendidos ---
+
         const productSalesMap = new Map<
             number,
             { name: string; units: number; revenue: number }
@@ -101,7 +104,7 @@ export class StoreStatsService {
                 }
                 : null;
 
-        // --- Mejor y peor stock ---
+
         const sortedStock = stock.sort(
             (a, b) => Number(b.quantity) - Number(a.quantity),
         );
@@ -123,7 +126,6 @@ export class StoreStatsService {
             }
             : null;
 
-        // --- Últimas ventas ---
         const lastSales = sales
             .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
             .slice(0, 5)
@@ -134,7 +136,6 @@ export class StoreStatsService {
                 createdAt: s.createdAt,
             }));
 
-        // --- Resultado final ---
         return {
             total_sales: totalSales,
             total_revenue: Number(totalRevenue.toFixed(2)),
@@ -150,7 +151,7 @@ export class StoreStatsService {
     }
 
     async getProductsByRole(user: any) {
-        // Si es superadmin → devuelve todo
+
         if (user.role === 'superadmin') {
             return await this.productRepo.find({
                 relations: ['store', 'category'],
@@ -158,7 +159,7 @@ export class StoreStatsService {
             });
         }
 
-        // Si es tienda → filtra por storeId
+
         if (user.role === 'store') {
             const storeId = user.storeId;
             if (!storeId) {
@@ -172,7 +173,6 @@ export class StoreStatsService {
             });
         }
 
-        // En cualquier otro caso, acceso denegado
         throw new Error('Rol no autorizado para acceder a productos.');
     }
 
@@ -218,7 +218,6 @@ export class StoreStatsService {
             throw new HttpException('El usuario no tiene una tienda asociada.', HttpStatus.NOT_FOUND);
         }
 
-        console.log(user);
 
         return {
             id: user.id,
@@ -256,5 +255,35 @@ export class StoreStatsService {
         };
     }
 
+    async updateProfileWithStore(userId: number, body: any) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            relations: ['store', 'store.detail'],
+        });
 
+        if (!user) throw new NotFoundException('Usuario no encontrado');
+        if (!user.store) throw new NotFoundException('No se encontró una tienda vinculada');
+
+        const { userData, storeData, detailData } = body;
+
+        // 🔹 Actualiza usuario
+        if (userData) {
+            await this.userRepo.update(user.id, userData);
+        }
+
+        // 🔹 Actualiza tienda
+        if (storeData) {
+            await this.storeRepo.update(user.store.id, storeData);
+        }
+
+        // 🔹 Actualiza detalle de tienda
+        if (detailData) {
+            await this.storesService.updateDetail(user.store.id, detailData);
+        }
+
+        return {
+            ok: true,
+            message: 'Perfil y tienda actualizados correctamente',
+        };
+    }
 }
