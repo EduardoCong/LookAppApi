@@ -36,7 +36,7 @@ import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.modu
     StoresModule,
     ProductCategoriesModule,
     ProductsModule,
-    AdminStoresModule,
+    // AdminStoresModule,
     GeminiIaModule,
   ],
   controllers: [AppController],

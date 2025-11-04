@@ -19,7 +19,7 @@ import { CreateStoreDto, UpdateStoreDto } from './dto/create-store.dto';
 import { StoreStatus } from './entities/store.entity';
 import { UpdateStoreDetailDto } from './dto/store-detail.dto';
 
-@ApiTags('Web - Stores')
+@ApiTags('Stores')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('web/stores')

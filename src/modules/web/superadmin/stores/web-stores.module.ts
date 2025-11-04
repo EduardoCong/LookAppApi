@@ -9,10 +9,14 @@ import { WebStoresService } from './web-stores.service';
 import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
 import { PosSale } from '../../admin-store/pos/entities/pos-sale.entity';
 import { PosStock } from '../../admin-store/pos/entities/pos-stock.entity';
+import { AdminStoresService } from 'src/modules/web-admin/stores/admin-stores.service';
+import { StoreReviewLog } from 'src/modules/web-admin/stores/entities/store-review-log.entity';
+import { StoresService } from 'src/modules/stores/stores.service';
+import { Category } from 'src/modules/categories/entities/category.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Store, StoreDetail, User, StoreSubscription, PosSale, PosStock]), ConfigModule],
+    imports: [TypeOrmModule.forFeature([Store, StoreDetail, User, StoreSubscription, PosSale, PosStock, StoreReviewLog, Category]), ConfigModule],
     controllers: [WebStoresController],
-    providers: [WebStoresService],
+    providers: [WebStoresService, AdminStoresService, StoresService],
 })
 export class WebStoresModule { }
