@@ -28,7 +28,8 @@ import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.modu
       synchronize: true,
       ssl: true,
     }),
-    AuthModule, //Auth Global
+    AuthModule,
+    StoreStatsModule, //Auth Global
     WebStoresModule, //Endpoints para superadmin
     CategoriesModule,
     UsersModule,
@@ -37,7 +38,6 @@ import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.modu
     ProductsModule,
     AdminStoresModule,
     GeminiIaModule,
-    StoreStatsModule
   ],
   controllers: [AppController],
   providers: [AppService],
