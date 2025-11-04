@@ -10,13 +10,16 @@ import { StoreSubscription } from 'src/modules/stores/entities/store-subscriptio
 import { User } from 'src/modules/users/entities/user.entity';
 import { WebStoresService } from '../../superadmin/stores/web-stores.service';
 import { StoreDetail } from 'src/modules/stores/entities/store-detail.entity';
+import { StoresModule } from 'src/modules/stores/stores.module';
+import { StoresService } from 'src/modules/stores/stores.service';
+import { Category } from 'src/modules/categories/entities/category.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User]),
+        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User, Category]),
     ],
     controllers: [StoreStatsController],
-    providers: [StoreStatsService, WebStoresService],
-    exports: [StoreStatsService, WebStoresService],
+    providers: [StoreStatsService, WebStoresService, StoresService],
+    exports: [StoreStatsService, WebStoresService, StoresService],
 })
 export class StoreStatsModule { }
