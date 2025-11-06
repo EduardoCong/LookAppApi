@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { Get, HttpException, HttpStatus, Injectable, NotFoundException, Query, Req } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { PosSale } from 'src/modules/web/admin-store/pos/entities/pos-sale.entity';
@@ -9,6 +9,7 @@ import { Store } from 'src/modules/stores/entities/store.entity';
 import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { StoresService } from 'src/modules/stores/stores.service';
+import { StoreReportsService } from '../reports/store-reports.service';
 
 @Injectable()
 export class StoreStatsService {
