@@ -7,13 +7,20 @@ import { PosStock } from 'src/modules/web/admin-store/pos/entities/pos-stock.ent
 import { Product } from 'src/modules/products/entities/product.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
 import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
+import { User } from 'src/modules/users/entities/user.entity';
+import { WebStoresService } from '../../superadmin/stores/web-stores.service';
+import { StoreDetail } from 'src/modules/stores/entities/store-detail.entity';
+import { StoresModule } from 'src/modules/stores/stores.module';
+import { StoresService } from 'src/modules/stores/stores.service';
+import { Category } from 'src/modules/categories/entities/category.entity';
+import { StoreReportsService } from '../reports/store-reports.service';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription]),
+        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User, Category]),
     ],
     controllers: [StoreStatsController],
-    providers: [StoreStatsService],
-    exports: [StoreStatsService],
+    providers: [StoreStatsService, WebStoresService, StoresService, StoreReportsService],
+    exports: [StoreStatsService, WebStoresService, StoresService, StoreReportsService],
 })
 export class StoreStatsModule { }

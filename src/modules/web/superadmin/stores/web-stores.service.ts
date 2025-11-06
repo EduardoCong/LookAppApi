@@ -303,6 +303,5 @@ export class WebStoresService {
             );
         }
 
-        console.log(`✅ POS inicializado para la tienda ID ${storeId}`);
     }
 }

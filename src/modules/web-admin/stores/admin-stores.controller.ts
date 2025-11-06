@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Patch, Body, HttpStatus, ParseIntPipe } from '@nestjs/common';
 import { AdminStoresService } from './admin-stores.service';
 
-@Controller('web/admin/stores')
+@Controller('stores')
 export class AdminStoresController {
     constructor(private readonly service: AdminStoresService) { }
 

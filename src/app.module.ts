@@ -31,16 +31,16 @@ import { DatabaseService } from './database/database.service';
         rejectUnauthorized: false,
       },
     }),
-    AuthModule, //Auth Global
+    AuthModule,
+    StoreStatsModule, //Auth Global
     WebStoresModule, //Endpoints para superadmin
     CategoriesModule,
     UsersModule,
     StoresModule,
     ProductCategoriesModule,
     ProductsModule,
-    AdminStoresModule,
+    // AdminStoresModule,
     GeminiIaModule,
-    StoreStatsModule
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],

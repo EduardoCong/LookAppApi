@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { Get, HttpException, HttpStatus, Injectable, NotFoundException, Query, Req } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { PosSale } from 'src/modules/web/admin-store/pos/entities/pos-sale.entity';
@@ -7,6 +7,9 @@ import { subDays, startOfDay } from 'date-fns';
 import { Product } from 'src/modules/products/entities/product.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
 import { StoreSubscription } from 'src/modules/stores/entities/store-subscription.entity';
+import { User } from 'src/modules/users/entities/user.entity';
+import { StoresService } from 'src/modules/stores/stores.service';
+import { StoreReportsService } from '../reports/store-reports.service';
 
 @Injectable()
 export class StoreStatsService {
@@ -25,13 +28,19 @@ export class StoreStatsService {
 
         @InjectRepository(StoreSubscription)
         private readonly subRepo: Repository<StoreSubscription>,
+
+        @InjectRepository(User)
+        private readonly userRepo: Repository<User>,
+
+
+        private readonly storesService: StoresService,
     ) { }
 
     async getStatsForStore(storeId: number) {
         const today = new Date();
         const last7 = subDays(startOfDay(today), 6);
 
-        // 🔹 Cargar ventas recientes y stock
+
         const sales = await this.salesRepo.find({
             where: { store: { id: storeId }, createdAt: Between(last7, today) },
         });
@@ -40,7 +49,6 @@ export class StoreStatsService {
             where: { store: { id: storeId } },
         });
 
-        // --- Totales generales ---
         const totalSales = sales.length;
         const totalRevenue = sales.reduce(
             (sum, s) => sum + Number(s.total ?? 0),
@@ -53,7 +61,7 @@ export class StoreStatsService {
         );
         const lowStock = stock.filter((s) => Number(s.quantity) < 10).length;
 
-        // --- Productos más y menos vendidos ---
+
         const productSalesMap = new Map<
             number,
             { name: string; units: number; revenue: number }
@@ -97,7 +105,7 @@ export class StoreStatsService {
                 }
                 : null;
 
-        // --- Mejor y peor stock ---
+
         const sortedStock = stock.sort(
             (a, b) => Number(b.quantity) - Number(a.quantity),
         );
@@ -119,7 +127,6 @@ export class StoreStatsService {
             }
             : null;
 
-        // --- Últimas ventas ---
         const lastSales = sales
             .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
             .slice(0, 5)
@@ -130,7 +137,6 @@ export class StoreStatsService {
                 createdAt: s.createdAt,
             }));
 
-        // --- Resultado final ---
         return {
             total_sales: totalSales,
             total_revenue: Number(totalRevenue.toFixed(2)),
@@ -146,7 +152,7 @@ export class StoreStatsService {
     }
 
     async getProductsByRole(user: any) {
-        // Si es superadmin → devuelve todo
+
         if (user.role === 'superadmin') {
             return await this.productRepo.find({
                 relations: ['store', 'category'],
@@ -154,7 +160,7 @@ export class StoreStatsService {
             });
         }
 
-        // Si es tienda → filtra por storeId
+
         if (user.role === 'store') {
             const storeId = user.storeId;
             if (!storeId) {
@@ -168,7 +174,6 @@ export class StoreStatsService {
             });
         }
 
-        // En cualquier otro caso, acceso denegado
         throw new Error('Rol no autorizado para acceder a productos.');
     }
 
@@ -194,4 +199,136 @@ export class StoreStatsService {
         };
     }
 
+
+    async getProfileWithStore(userId: number) {
+
+        if (!userId) {
+            throw new HttpException('Falta el ID del usuario autenticado.', HttpStatus.BAD_REQUEST);
+        }
+
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            relations: ['store', 'store.category', 'store.detail'],
+        });
+
+        if (!user) {
+            throw new HttpException('Usuario no encontrado.', HttpStatus.NOT_FOUND);
+        }
+
+        if (!user.store) {
+            throw new HttpException('El usuario no tiene una tienda asociada.', HttpStatus.NOT_FOUND);
+        }
+
+
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            username: user.username,
+            created_at: user.created_at,
+            store: {
+                id: user.store.id,
+                business_name: user.store.business_name,
+                owner_name: user.store.owner_name,
+                address: user.store.address,
+                description: user.store.description,
+                status: user.store.status,
+                is_verified: user.store.is_verified,
+                category: user.store.category ? user.store.category.name : null,
+            },
+            detail: user.store.detail ? {
+                id: user.store.detail.id,
+                description: user.store.detail.description,
+                rfc: user.store.detail.rfc,
+                phone: user.store.detail.phone,
+                email_contact: user.store.detail.email_contact,
+                logo_url: user.store.detail.logo_url,
+                cover_image_url: user.store.detail.cover_image_url,
+                opening_hours: user.store.detail.opening_hours,
+                reference: user.store.detail.reference,
+                contact_method: user.store.detail.contact_method,
+                social_links: user.store.detail.social_links,
+                created_at: user.store.detail.created_at,
+                updated_at: user.store.detail.updated_at,
+            } : null
+        };
+    }
+
+    async updateProfileWithStore(userId: number, body: any) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            relations: ['store', 'store.detail'],
+        });
+
+        if (!user) throw new NotFoundException('Usuario no encontrado');
+        if (!user.store) throw new NotFoundException('No se encontró una tienda vinculada');
+
+        const { userData, storeData, detailData } = body;
+
+        // 🔹 Actualiza usuario
+        if (userData) {
+            await this.userRepo.update(user.id, userData);
+        }
+
+        // 🔹 Actualiza tienda
+        if (storeData) {
+            await this.storeRepo.update(user.store.id, storeData);
+        }
+
+        // 🔹 Actualiza detalle de tienda
+        if (detailData) {
+            await this.storesService.updateDetail(user.store.id, detailData);
+        }
+
+        return {
+            ok: true,
+            message: 'Perfil y tienda actualizados correctamente',
+        };
+    }
+
+    async getAllSubscriptions() {
+        try {
+            const subscriptions = await this.subRepo.find({
+                relations: ['store'],
+                order: { created_at: 'DESC' },
+            });
+
+            if (!subscriptions.length) {
+                throw new HttpException(
+                    'No se encontraron suscripciones registradas.',
+                    HttpStatus.NOT_FOUND,
+                );
+            }
+
+            return subscriptions.map((s) => ({
+                id: s.id,
+                plan: s.plan_key,
+                price_id: s.price_id,
+                stripe_subscription_id: s.stripe_subscription_id,
+                stripe_customer_id: s.stripe_customer_id,
+                status: s.status,
+                current_period_start: s.current_period_start,
+                current_period_end: s.current_period_end,
+                created_at: s.created_at,
+                store: s.store
+                    ? {
+                        id: s.store.id,
+                        business_name: s.store.business_name,
+                        owner_name: s.store.owner_name,
+                        email: s.store?.user?.email ?? null,
+                        status: s.store.status,
+                        is_verified: s.store.is_verified,
+                    }
+                    : null,
+            }));
+        } catch (error) {
+            console.error('Error listing all subscriptions:', error);
+            throw new HttpException(
+                'Error al listar las suscripciones.',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
 }
