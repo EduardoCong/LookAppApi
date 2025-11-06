@@ -287,4 +287,48 @@ export class StoreStatsService {
             message: 'Perfil y tienda actualizados correctamente',
         };
     }
+
+    async getAllSubscriptions() {
+        try {
+            const subscriptions = await this.subRepo.find({
+                relations: ['store'],
+                order: { created_at: 'DESC' },
+            });
+
+            if (!subscriptions.length) {
+                throw new HttpException(
+                    'No se encontraron suscripciones registradas.',
+                    HttpStatus.NOT_FOUND,
+                );
+            }
+
+            return subscriptions.map((s) => ({
+                id: s.id,
+                plan: s.plan_key,
+                price_id: s.price_id,
+                stripe_subscription_id: s.stripe_subscription_id,
+                stripe_customer_id: s.stripe_customer_id,
+                status: s.status,
+                current_period_start: s.current_period_start,
+                current_period_end: s.current_period_end,
+                created_at: s.created_at,
+                store: s.store
+                    ? {
+                        id: s.store.id,
+                        business_name: s.store.business_name,
+                        owner_name: s.store.owner_name,
+                        email: s.store?.user?.email ?? null,
+                        status: s.store.status,
+                        is_verified: s.store.is_verified,
+                    }
+                    : null,
+            }));
+        } catch (error) {
+            console.error('Error listing all subscriptions:', error);
+            throw new HttpException(
+                'Error al listar las suscripciones.',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
 }
