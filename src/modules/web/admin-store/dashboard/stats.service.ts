@@ -10,6 +10,7 @@ import { StoreSubscription } from 'src/modules/stores/entities/store-subscriptio
 import { User } from 'src/modules/users/entities/user.entity';
 import { StoresService } from 'src/modules/stores/stores.service';
 import { StoreReportsService } from '../reports/store-reports.service';
+import { Category } from 'src/modules/categories/entities/category.entity';
 
 @Injectable()
 export class StoreStatsService {
@@ -31,6 +32,9 @@ export class StoreStatsService {
 
         @InjectRepository(User)
         private readonly userRepo: Repository<User>,
+
+        @InjectRepository(Category)
+        private readonly categoryRepo: Repository<Category>,
 
 
         private readonly storesService: StoresService,
@@ -267,17 +271,32 @@ export class StoreStatsService {
 
         const { userData, storeData, detailData } = body;
 
-        // 🔹 Actualiza usuario
+        //  Actualiza usuario
         if (userData) {
             await this.userRepo.update(user.id, userData);
         }
 
-        // 🔹 Actualiza tienda
+        //  Actualiza tienda
         if (storeData) {
-            await this.storeRepo.update(user.store.id, storeData);
+            const store = await this.storeRepo.findOne({
+                where: { id: user.store.id },
+                relations: ['category'],
+            });
+            if (!store) throw new NotFoundException('Tienda no encontrada');
+
+            if (storeData.category_id) {
+                const category = await this.categoryRepo.findOneBy({ id: storeData.category_id });
+                if (!category) throw new NotFoundException('Categoría no encontrada');
+                store.category = category;
+                delete storeData.category_id;
+            }
+
+            Object.assign(store, storeData);
+            await this.storeRepo.save(store);
         }
 
-        // 🔹 Actualiza detalle de tienda
+
+        // Actualiza detalle de tienda
         if (detailData) {
             await this.storesService.updateDetail(user.store.id, detailData);
         }
