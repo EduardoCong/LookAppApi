@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, HttpStatus, Patch, Post, Query, Req } from '@nestjs/common';
 import { StoreStatsService } from './stats.service';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
@@ -7,6 +7,7 @@ import type { Request } from 'express';
 import { WebStoresService } from '../../superadmin/stores/web-stores.service';
 import { RegisterStoreDto } from '../../superadmin/stores/dto/register-store.dto';
 import { Public } from 'src/common/decorators/public.decorator';
+import { StoreReportsService } from '../reports/store-reports.service';
 
 @Controller('web/stores')
 @ApiTags('WEB / Admin Store')
@@ -16,7 +17,8 @@ export class StoreStatsController {
     constructor(
         private readonly statsService: StoreStatsService,
         private readonly configService: ConfigService,
-        private readonly service: WebStoresService
+        private readonly service: WebStoresService,
+        private readonly reportsService: StoreReportsService
     ) {
         const secret = this.configService.get<string>('JWT_SECRET');
         if (!secret) {
@@ -329,5 +331,121 @@ export class StoreStatsController {
             };
         }
     }
+
+    // --- Reportes de Tienda (Ventas, Inventario, Desempeño) ---
+
+    @ApiBearerAuth()
+    @Get('mine/reports/sales')
+    @ApiOperation({
+        summary: 'Reporte de ventas por rango de fechas',
+        description:
+            'Devuelve el total de ventas, unidades, ticket promedio y los productos más vendidos dentro del rango solicitado.',
+    })
+    async getSalesReport(
+        @Req() req: Request,
+        @Query('from') from?: string,
+        @Query('to') to?: string,
+    ) {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                throw new HttpException('No authorization header provided', HttpStatus.UNAUTHORIZED);
+            }
+
+            const token = authHeader.replace('Bearer ', '').trim();
+            const decoded: any = jwt.verify(token, this.jwtSecret);
+
+            const storeId =
+                decoded.storeId ??
+                decoded.defaultStoreId ??
+                decoded.user?.store?.id ??
+                decoded.stores?.[0]?.id;
+
+            if (!storeId) {
+                throw new HttpException('No store linked to user', HttpStatus.BAD_REQUEST);
+            }
+
+            const data = await this.reportsService.getSalesReport(storeId, from, to);
+            return { ok: true, data };
+        } catch (err: any) {
+            console.error('Error in getSalesReport:', err.message);
+            throw new HttpException('Unauthorized or invalid token', HttpStatus.UNAUTHORIZED);
+        }
+    }
+
+    @ApiBearerAuth()
+    @Get('mine/reports/inventory')
+    @ApiOperation({
+        summary: 'Reporte de inventario actual de la tienda',
+        description:
+            'Devuelve el stock actual de productos, conteos totales, unidades bajas, y costo unitario promedio.',
+    })
+    async getInventoryReport(@Req() req: Request) {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                throw new HttpException('No authorization header provided', HttpStatus.UNAUTHORIZED);
+            }
+
+            const token = authHeader.replace('Bearer ', '').trim();
+            const decoded: any = jwt.verify(token, this.jwtSecret);
+
+            const storeId =
+                decoded.storeId ??
+                decoded.defaultStoreId ??
+                decoded.user?.store?.id ??
+                decoded.stores?.[0]?.id;
+
+            if (!storeId) {
+                throw new HttpException('No store linked to user', HttpStatus.BAD_REQUEST);
+            }
+
+            const data = await this.reportsService.getInventoryReport(storeId);
+            return { ok: true, data };
+        } catch (err: any) {
+            console.error('Error in getInventoryReport:', err.message);
+            throw new HttpException('Unauthorized or invalid token', HttpStatus.UNAUTHORIZED);
+        }
+    }
+
+    @ApiBearerAuth()
+    @Get('mine/reports/daily')
+    @ApiOperation({
+        summary: 'Reporte de desempeño diario de ventas',
+        description:
+            'Agrupa las ventas por día, mostrando totales, ticket promedio y número de operaciones por fecha.',
+    })
+    async getDailyReport(
+        @Req() req: Request,
+        @Query('from') from?: string,
+        @Query('to') to?: string,
+    ) {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                throw new HttpException('No authorization header provided', HttpStatus.UNAUTHORIZED);
+            }
+
+            const token = authHeader.replace('Bearer ', '').trim();
+            const decoded: any = jwt.verify(token, this.jwtSecret);
+
+            const storeId =
+                decoded.storeId ??
+                decoded.defaultStoreId ??
+                decoded.user?.store?.id ??
+                decoded.stores?.[0]?.id;
+
+            if (!storeId) {
+                throw new HttpException('No store linked to user', HttpStatus.BAD_REQUEST);
+            }
+
+            const data = await this.reportsService.getDailyPerformance(storeId, from, to);
+            return { ok: true, data };
+        } catch (err: any) {
+            console.error('Error in getDailyReport:', err.message);
+            throw new HttpException('Unauthorized or invalid token', HttpStatus.UNAUTHORIZED);
+        }
+    }
+
 }
 

@@ -13,13 +13,14 @@ import { StoreDetail } from 'src/modules/stores/entities/store-detail.entity';
 import { StoresModule } from 'src/modules/stores/stores.module';
 import { StoresService } from 'src/modules/stores/stores.service';
 import { Category } from 'src/modules/categories/entities/category.entity';
+import { StoreReportsService } from '../reports/store-reports.service';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User, Category]),
     ],
     controllers: [StoreStatsController],
-    providers: [StoreStatsService, WebStoresService, StoresService],
-    exports: [StoreStatsService, WebStoresService, StoresService],
+    providers: [StoreStatsService, WebStoresService, StoresService, StoreReportsService],
+    exports: [StoreStatsService, WebStoresService, StoresService, StoreReportsService],
 })
 export class StoreStatsModule { }
