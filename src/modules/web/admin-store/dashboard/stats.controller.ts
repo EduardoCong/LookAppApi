@@ -332,8 +332,6 @@ export class StoreStatsController {
         }
     }
 
-    // --- Reportes de Tienda (Ventas, Inventario, Desempeño) ---
-
     @ApiBearerAuth()
     @Get('mine/reports/sales')
     @ApiOperation({
@@ -444,6 +442,25 @@ export class StoreStatsController {
         } catch (err: any) {
             console.error('Error in getDailyReport:', err.message);
             throw new HttpException('Unauthorized or invalid token', HttpStatus.UNAUTHORIZED);
+        }
+    }
+
+    @Get('/subscriptions')
+    @ApiOperation({
+        summary: 'Lista de suscripciones de todas las tiendas',
+        description:
+            'Devuelve todas las suscripciones registradas, incluyendo tienda, plan, estado y fechas.',
+    })
+    async getAllSubscriptions() {
+        try {
+            const data = await this.statsService.getAllSubscriptions();
+            return { ok: true, total: data.length, data };
+        } catch (err: any) {
+            console.error('Error fetching subscriptions:', err.message);
+            throw new HttpException(
+                'Error al obtener las suscripciones',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
         }
     }
 
