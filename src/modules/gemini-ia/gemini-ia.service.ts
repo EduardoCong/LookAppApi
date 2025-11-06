@@ -5,6 +5,8 @@ import axios from 'axios';
 import { Store } from '../stores/entities/store.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
+import { PosStock } from '../stores/entities/pos_stock.entity';
+import { PosSale } from '../web/admin-store/pos/entities/pos-sale.entity';
 
 @Injectable()
 export class GeminiIaService {
@@ -15,6 +17,8 @@ export class GeminiIaService {
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(Store) private readonly storeRepo: Repository<Store>,
+    @InjectRepository(PosSale) private readonly posSaleRepo: Repository<PosSale>,
+    @InjectRepository(PosStock) private readonly posStockRepo: Repository<PosStock>
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) throw new Error('No se encontró la API key de Gemini');
@@ -146,6 +150,67 @@ export class GeminiIaService {
     const buffer = Buffer.from(response.data, 'binary');
     const mimeType = imageUrl.endsWith('png') ? 'image/png' : 'image/jpeg';
     return this.analyzeImage(buffer, mimeType);
+  }
+
+  async analyzeStorePerformance(storeId: number) {
+    const sales = await this.posSaleRepo
+      .createQueryBuilder('s')
+      .select([
+        's.productName AS productName',
+        'SUM(s.quantity) AS totalQty',
+        'SUM(s.total) AS totalRevenue',
+      ])
+      .where('s.storeId = :storeId', { storeId })
+      .groupBy('s.productName')
+      .orderBy('totalQty', 'DESC')
+      .getRawMany();
+
+    const global = await this.posSaleRepo
+      .createQueryBuilder('s')
+      .select([
+        's.productName AS productName',
+        'AVG(s.quantity) AS avgQty',
+        'AVG(s.total) AS avgRevenue',
+      ])
+      .groupBy('s.productName')
+      .getRawMany();
+
+    const stock = await this.posStockRepo.find({
+      where: { store: { id: storeId } },
+    });
+
+    const prompt = `
+Eres un analista de datos y marketing experto en ventas retail.
+
+Datos de la tienda ID ${storeId}:
+- Ventas por producto: ${JSON.stringify(sales)}
+- Promedio global por producto: ${JSON.stringify(global)}
+- Niveles de stock actuales: ${JSON.stringify(
+      stock.map((s) => ({
+        name: s.productName,
+        quantity: s.quantity,
+        cost: s.cost,
+      })),
+    )}
+
+Tareas:
+1. Identifica los 5 productos más vendidos y explica 2 razones posibles de su éxito.
+2. Identifica los 5 productos menos vendidos y sugiere 2 acciones para mejorar sus ventas.
+3. Compara los resultados con el promedio global.
+4. Devuelve la respuesta en formato JSON con esta estructura:
+{
+ "top_products": [...],
+ "low_products": [...],
+ "executive_summary": [...]
+}
+`;
+
+    const model = this.genIA.getGenerativeModel({ model: this.modelIA });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
+    this.logger.log('AI Analysis generated successfully');
+    return { data: sales, ai: text };
   }
 
   private async findStoresWithMaterials(materials: string[]) {

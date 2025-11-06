@@ -6,6 +6,7 @@ import {
   UseInterceptors,
   BadRequestException,
   Get,
+  Param,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GeminiIaService } from './gemini-ia.service';
@@ -89,5 +90,11 @@ export class GeminiIaController {
     }
 
     return { source, ...result };
+  }
+
+  @Get(':id/stats')
+  async getStoreStats(@Param('id') id: string) {
+    const storeId = parseInt(id, 10);
+    return await this.aiService.analyzeStorePerformance(storeId);
   }
 }
