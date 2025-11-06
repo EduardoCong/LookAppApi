@@ -28,20 +28,8 @@ export class GeminiIaController {
     FileInterceptor('image', {
       storage: memoryStorage(),
       fileFilter: (req, file, cb) => {
-        const allowedTypes = [
-          'image/jpeg',
-          'image/jpg',
-          'image/png',
-          'image/webp',
-          'image/heic',
-          'image/heif',
-        ];
-        if (allowedTypes.includes(file.mimetype)) cb(null, true);
-        else
-          cb(
-            new BadRequestException('Solo se permiten fotos JPG o PNG'),
-            false,
-          );
+        if (file.mimetype.startsWith('image/')) cb(null, true);
+        else cb(new BadRequestException('Solo se permiten imágenes'), false);
       },
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
