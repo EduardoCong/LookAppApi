@@ -14,6 +14,7 @@ import { StoresModule } from './modules/stores/stores.module';
 import { AdminStoresModule } from './modules/web-admin/stores/admin-stores.module';
 import { WebStoresModule } from './modules/web/superadmin/stores/web-stores.module';
 import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.module';
+import { DatabaseService } from './database/database.service';
 
 @Module({
   imports: [
@@ -25,8 +26,10 @@ import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.modu
       type: 'postgres',
       url: process.env.DATABASE_URL,
       autoLoadEntities: true,
-      synchronize: true,
-      ssl: true,
+      synchronize: false,
+      ssl: {
+        rejectUnauthorized: false,
+      },
     }),
     AuthModule, //Auth Global
     WebStoresModule, //Endpoints para superadmin
@@ -40,6 +43,6 @@ import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.modu
     StoreStatsModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, DatabaseService],
 })
 export class AppModule { }

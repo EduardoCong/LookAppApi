@@ -13,168 +13,184 @@ import { Store } from '../stores/entities/store.entity';
 
 @Injectable()
 export class ProductsService {
-    private readonly BASE_URL: string;
-    constructor(
-        @InjectRepository(Product)
-        private readonly productRepository: Repository<Product>,
-        @InjectRepository(Store)
-        private readonly storeRepository: Repository<Store>,
-        @InjectRepository(ProductCategory)
-        private readonly categoryRepository: Repository<ProductCategory>,
-        private readonly geminiIaService: GeminiIaService,
-        private readonly configService: ConfigService
-    ) {
-        this.BASE_URL = this.configService.get<string>('URL_PROD') || 'http://localhost:3000';
+  private readonly BASE_URL: string;
+  constructor(
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
+    @InjectRepository(Store)
+    private readonly storeRepository: Repository<Store>,
+    @InjectRepository(ProductCategory)
+    private readonly categoryRepository: Repository<ProductCategory>,
+    private readonly geminiIaService: GeminiIaService,
+    private readonly configService: ConfigService,
+  ) {
+    this.BASE_URL =
+      this.configService.get<string>('URL_PROD') || 'http://localhost:3000';
+  }
+
+  async create(
+    createProductDto: CreateProductDto,
+    imageBuffer?: Buffer,
+    mimeType?: string,
+    originalName?: string,
+  ) {
+    const { storeId, categoryId, imageUrl } = createProductDto;
+
+    const store = await this.storeRepository.findOne({
+      where: { id: storeId },
+    });
+    if (!store) throw new NotFoundException('La tienda especificada no existe');
+
+    let category: ProductCategory | null = null;
+    if (categoryId) {
+      category = await this.categoryRepository.findOne({
+        where: { id: categoryId },
+      });
+      if (!category)
+        throw new NotFoundException('La categoría de producto no existe');
     }
 
-    async create(
-        createProductDto: CreateProductDto,
-        imageBuffer?: Buffer,
-        mimeType?: string,
-        originalName?: string,
-    ) {
-        const { storeId, categoryId, imageUrl } = createProductDto;
+    let aiDescription: string | null = null;
+    let finalImageUrl: string | null = imageUrl ?? null;
 
-        const store = await this.storeRepository.findOne({ where: { id: storeId } });
-        if (!store) throw new NotFoundException('La tienda especificada no existe');
+    if (imageBuffer && mimeType) {
+      const aiResult = await this.geminiIaService.analyzeImage(
+        imageBuffer,
+        mimeType,
+      );
+      aiDescription = Array.isArray(aiResult.materials)
+        ? aiResult.materials.join(', ')
+        : (aiResult.message ?? null);
 
-        let category: ProductCategory | null = null;
-        if (categoryId) {
-            category = await this.categoryRepository.findOne({ where: { id: categoryId } });
-            if (!category) throw new NotFoundException('La categoría de producto no existe');
-        }
+      const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'products');
 
-        let aiDescription: string | null = null;
-        let finalImageUrl: string | null = imageUrl ?? null;
+      const extension =
+        mimeType === 'image/png'
+          ? 'png'
+          : mimeType === 'image/jpeg'
+            ? 'jpg'
+            : mimeType === 'image/webp'
+              ? 'webp'
+              : 'jpg';
 
-        if (imageBuffer && mimeType) {
-            aiDescription = await this.geminiIaService.analyzeImage(imageBuffer, mimeType);
+      const fileName = `product_${Date.now()}.${extension}`;
 
-            const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'products');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
 
-            const extension = mimeType === 'image/png' ? 'png' :
-                mimeType === 'image/jpeg' ? 'jpg' :
-                    mimeType === 'image/webp' ? 'webp' : 'jpg';
+      const filePath = path.join(uploadDir, fileName);
+      fs.writeFileSync(filePath, imageBuffer);
 
-            const fileName = `product_${Date.now()}.${extension}`;
-
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-
-            const filePath = path.join(uploadDir, fileName);
-            fs.writeFileSync(filePath, imageBuffer);
-
-
-            finalImageUrl = `${this.BASE_URL}/uploads/products/${fileName}`;
-
-        }
-
-        const product = this.productRepository.create({
-            ...createProductDto,
-            aiDescription,
-            imageUrl: finalImageUrl,
-            store,
-            category,
-        } as any);
-
-        return await this.productRepository.save(product);
+      finalImageUrl = `${this.BASE_URL}/uploads/products/${fileName}`;
     }
 
+    const product = this.productRepository.create({
+      ...createProductDto,
+      aiDescription,
+      imageUrl: finalImageUrl,
+      store,
+      category,
+    } as any);
 
-    async findAll() {
-        return await this.productRepository.find({
-            relations: ['category'],
-            order: { createdAt: 'DESC' },
-        });
+    return await this.productRepository.save(product);
+  }
+
+  async findAll() {
+    return await this.productRepository.find({
+      relations: ['category'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findOne(id: number) {
+    const product = await this.productRepository.findOne({
+      where: { id },
+      relations: ['store', 'category'],
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+    return product;
+  }
+
+  async update(
+    id: number,
+    updateProductDto: UpdateProductDto,
+    imageBuffer?: Buffer,
+    mimeType?: string,
+  ) {
+    const product = await this.productRepository.findOne({
+      where: { id },
+      relations: ['store', 'category'],
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // Actualizar tienda
+    if (updateProductDto.storeId) {
+      const store = await this.storeRepository.findOne({
+        where: { id: updateProductDto.storeId },
+      });
+      if (!store)
+        throw new NotFoundException('La tienda especificada no existe');
+      product.store = store;
     }
 
-    async findOne(id: number) {
-        const product = await this.productRepository.findOne({
-            where: { id },
-            relations: ['store', 'category'],
-        });
-        if (!product) throw new NotFoundException('Producto no encontrado');
-        return product;
+    // Actualizar categoría
+    if (updateProductDto.categoryId) {
+      const category = await this.categoryRepository.findOne({
+        where: { id: updateProductDto.categoryId },
+      });
+      if (!category)
+        throw new NotFoundException('La categoría especificada no existe');
+      product.category = category;
     }
 
-    async update(
-        id: number,
-        updateProductDto: UpdateProductDto,
-        imageBuffer?: Buffer,
-        mimeType?: string,
-    ) {
-        const product = await this.productRepository.findOne({
-            where: { id },
-            relations: ['store', 'category'],
-        });
-        if (!product) throw new NotFoundException('Producto no encontrado');
+    // Actualizar imagen (si viene nueva)
+    if (imageBuffer && mimeType) {
+      const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'products');
+      const extension =
+        mimeType === 'image/png'
+          ? 'png'
+          : mimeType === 'image/jpeg'
+            ? 'jpg'
+            : mimeType === 'image/webp'
+              ? 'webp'
+              : 'jpg';
+      const fileName = `product_${Date.now()}.${extension}`;
 
-        // Actualizar tienda
-        if (updateProductDto.storeId) {
-            const store = await this.storeRepository.findOne({
-                where: { id: updateProductDto.storeId },
-            });
-            if (!store) throw new NotFoundException('La tienda especificada no existe');
-            product.store = store;
-        }
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
 
-        // Actualizar categoría
-        if (updateProductDto.categoryId) {
-            const category = await this.categoryRepository.findOne({
-                where: { id: updateProductDto.categoryId },
-            });
-            if (!category) throw new NotFoundException('La categoría especificada no existe');
-            product.category = category;
-        }
+      const filePath = path.join(uploadDir, fileName);
+      fs.writeFileSync(filePath, imageBuffer);
 
-        // Actualizar imagen (si viene nueva)
-        if (imageBuffer && mimeType) {
-            const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'products');
-            const extension =
-                mimeType === 'image/png'
-                    ? 'png'
-                    : mimeType === 'image/jpeg'
-                        ? 'jpg'
-                        : mimeType === 'image/webp'
-                            ? 'webp'
-                            : 'jpg';
-            const fileName = `product_${Date.now()}.${extension}`;
-
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-
-            const filePath = path.join(uploadDir, fileName);
-            fs.writeFileSync(filePath, imageBuffer);
-
-            product.imageUrl = `${this.BASE_URL}/uploads/products/${fileName}`;
-        }
-
-        Object.assign(product, updateProductDto);
-        return await this.productRepository.save(product);
+      product.imageUrl = `${this.BASE_URL}/uploads/products/${fileName}`;
     }
 
-    async remove(id: number) {
-        const product = await this.productRepository.findOne({ where: { id } });
-        if (!product) throw new NotFoundException('Producto no encontrado');
+    Object.assign(product, updateProductDto);
+    return await this.productRepository.save(product);
+  }
 
-        // Si tiene imagen, la borra del sistema de archivos
-        if (product.imageUrl) {
-            const filePath = path.join(
-                __dirname,
-                '..',
-                '..',
-                'uploads',
-                'products',
-                path.basename(product.imageUrl),
-            );
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-        }
+  async remove(id: number) {
+    const product = await this.productRepository.findOne({ where: { id } });
+    if (!product) throw new NotFoundException('Producto no encontrado');
 
-        await this.productRepository.remove(product);
-        return { message: 'Producto eliminado correctamente' };
+    // Si tiene imagen, la borra del sistema de archivos
+    if (product.imageUrl) {
+      const filePath = path.join(
+        __dirname,
+        '..',
+        '..',
+        'uploads',
+        'products',
+        path.basename(product.imageUrl),
+      );
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
+
+    await this.productRepository.remove(product);
+    return { message: 'Producto eliminado correctamente' };
+  }
 }

@@ -5,6 +5,7 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  Get,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GeminiIaService } from './gemini-ia.service';
@@ -18,7 +19,7 @@ export class GeminiIaController {
   @Post('text')
   async analyzeText(@Body() AnalizeTextDto: AnalizeTextDto) {
     const { prompt } = AnalizeTextDto;
-    const result = await this.aiService.analizeText(prompt);
+    const result = await this.aiService.analyzeText(prompt);
     return { success: true, result };
   }
 
@@ -27,27 +28,35 @@ export class GeminiIaController {
     FileInterceptor('image', {
       storage: memoryStorage(),
       fileFilter: (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png'];
-        if (allowedTypes.includes(file.mimetype)) {
-          cb(null, true);
-        } else {
+        const allowedTypes = [
+          'image/jpeg',
+          'image/jpg',
+          'image/png',
+          'image/webp',
+          'image/heic',
+          'image/heif',
+        ];
+        if (allowedTypes.includes(file.mimetype)) cb(null, true);
+        else
           cb(
             new BadRequestException('Solo se permiten fotos JPG o PNG'),
             false,
           );
-        }
       },
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  uploadPhoto(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('La foto es obligatoria');
-    }
+  async analyzePhoto(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('La foto es obligatoria');
+
+    const result = await this.aiService.analyzeImage(
+      file.buffer,
+      file.mimetype,
+    );
 
     return {
-      message: 'Foto recibida correctamente',
-      fileName: file.originalname,
+      source: file.originalname,
+      ...result,
     };
   }
 
@@ -55,16 +64,18 @@ export class GeminiIaController {
   @UseInterceptors(
     FileInterceptor('file', {
       fileFilter: (req, file, callback) => {
-        const allowedTypes = [ 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-
-        if (allowedTypes.includes(file.mimetype)) {
-          callback(null, true);
-        } else {
+        const allowedTypes = [
+          'image/jpeg',
+          'image/jpg',
+          'image/png',
+          'image/webp',
+        ];
+        if (allowedTypes.includes(file.mimetype)) callback(null, true);
+        else
           callback(
             new BadRequestException('Tipo de archivo no permitido.'),
             false,
           );
-        }
       },
     }),
   )
@@ -79,16 +90,16 @@ export class GeminiIaController {
     }
 
     let source: string;
-    let text: string;
+    let result: any;
 
     if (file) {
       source = file.originalname;
-      text = await this.aiService.analyzeImage(file.buffer, file.mimetype);
+      result = await this.aiService.analyzeImage(file.buffer, file.mimetype);
     } else {
-      source = imageUrl!;
-      text = await this.aiService.analyzeImageFromUrl(imageUrl!);
+      source = imageUrl;
+      result = await this.aiService.analyzeImageFromUrl(imageUrl);
     }
 
-    return { source, text };
+    return { source, ...result };
   }
 }
