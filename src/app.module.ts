@@ -15,6 +15,7 @@ import { AdminStoresModule } from './modules/web-admin/stores/admin-stores.modul
 import { WebStoresModule } from './modules/web/superadmin/stores/web-stores.module';
 import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.module';
 import { DatabaseService } from './database/database.service';
+import { AppMobileModule } from './modules/app/app.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { DatabaseService } from './database/database.service';
     AuthModule,
     StoreStatsModule, //Auth Global
     WebStoresModule, //Endpoints para superadmin
+    AppMobileModule,
     CategoriesModule,
     UsersModule,
     StoresModule,

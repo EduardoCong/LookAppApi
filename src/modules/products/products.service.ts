@@ -54,13 +54,14 @@ export class ProductsService {
     let finalImageUrl: string | null = imageUrl ?? null;
 
     if (imageBuffer && mimeType) {
-      const aiResult = await this.geminiIaService.analyzeImage(
-        imageBuffer,
-        mimeType,
-      );
-      aiDescription = Array.isArray(aiResult.materials)
-        ? aiResult.materials.join(', ')
-        : (aiResult.message ?? null);
+      const aiResult = await this.geminiIaService.analyzeImage(imageBuffer, mimeType);
+
+      if ('materials' in aiResult && Array.isArray(aiResult.materials)) {
+        aiDescription = aiResult.materials.join(', ');
+      } else {
+        aiDescription = aiResult.message ?? null;
+      }
+
 
       const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'products');
 

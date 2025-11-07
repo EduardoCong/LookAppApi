@@ -7,20 +7,39 @@ import {
   BadRequestException,
   Get,
   Param,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GeminiIaService } from './gemini-ia.service';
 import { memoryStorage } from 'multer';
 import { AnalizeTextDto } from './dto/analizeText.dto';
+import { ConfigService } from '@nestjs/config';
+import type { Request } from 'express';
+import * as jwt from 'jsonwebtoken';
 
 @Controller('analyze')
 export class GeminiIaController {
-  constructor(private readonly aiService: GeminiIaService) {}
+  private readonly jwtSecret: string;
+  constructor(private readonly aiService: GeminiIaService,
+    private readonly configService: ConfigService,
+  ) {
+    const secret = this.configService.get<string>('JWT_SECRET');
+    if (!secret) throw new Error('JWT_SECRET not found');
+    this.jwtSecret = secret;
+  }
 
   @Post('text')
-  async analyzeText(@Body() AnalizeTextDto: AnalizeTextDto) {
+  async analyzeText(@Req() req: Request, @Body() AnalizeTextDto: AnalizeTextDto) {
     const { prompt } = AnalizeTextDto;
-    const result = await this.aiService.analyzeText(prompt);
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader) throw new BadRequestException('Missing Authorization header');
+    const token = authHeader.replace('Bearer ', '').trim();
+
+    const decoded: any = jwt.verify(token, this.jwtSecret);
+    const user = { id: decoded.sub } as any;
+
+    const result = await this.aiService.analyzeText(prompt, user);
     return { success: true, result };
   }
 
@@ -35,12 +54,24 @@ export class GeminiIaController {
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  async analyzePhoto(@UploadedFile() file: Express.Multer.File) {
+  async analyzePhoto(@Req() req: Request, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('La foto es obligatoria');
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader) throw new BadRequestException('Missing Authorization header');
+    const token = authHeader.replace('Bearer ', '').trim();
+
+    const decoded: any = jwt.verify(token, this.jwtSecret);
+    if (!decoded?.sub) {
+      throw new BadRequestException('Invalid or malformed token: missing user ID');
+    }
+
+    const user = { id: decoded.sub } as any;
 
     const result = await this.aiService.analyzeImage(
       file.buffer,
       file.mimetype,
+      user
     );
 
     return {
@@ -69,6 +100,7 @@ export class GeminiIaController {
     }),
   )
   async analyzeImage(
+    @Req() req: Request,
     @UploadedFile() file: Express.Multer.File,
     @Body('imageUrl') imageUrl: string,
   ) {
@@ -78,12 +110,23 @@ export class GeminiIaController {
       );
     }
 
+    const authHeader = req.headers.authorization;
+    if (!authHeader) throw new BadRequestException('Missing Authorization header');
+
+    const token = authHeader.replace('Bearer ', '').trim();
+    const decoded: any = jwt.verify(token, this.jwtSecret);
+    if (!decoded?.sub) {
+      throw new BadRequestException('Invalid or malformed token: missing user ID');
+    }
+
+    const user = { id: decoded.sub } as any;
+
     let source: string;
     let result: any;
 
     if (file) {
       source = file.originalname;
-      result = await this.aiService.analyzeImage(file.buffer, file.mimetype);
+      result = await this.aiService.analyzeImage(file.buffer, file.mimetype, user);
     } else {
       source = imageUrl;
       result = await this.aiService.analyzeImageFromUrl(imageUrl);

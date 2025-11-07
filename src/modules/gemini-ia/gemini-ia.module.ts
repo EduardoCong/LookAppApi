@@ -6,11 +6,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Store } from '../stores/entities/store.entity';
 import { PosSale } from '../stores/entities/pos_sale.entity';
 import { PosStock } from '../stores/entities/pos_stock.entity';
+import { AiSearchOutput } from '../app/History/entities/ai_search_output.entity';
+import { SupabaseService } from 'src/supabase.service';
+import { AiSearchInput } from '../app/History/entities/ai_search_input.entity';
 
 @Module({
-  imports: [ConfigModule, TypeOrmModule.forFeature([Store, PosSale, PosStock])],
+  imports: [ConfigModule, TypeOrmModule.forFeature([Store, PosSale, PosStock, AiSearchOutput, AiSearchInput])],
   controllers: [GeminiIaController],
-  providers: [GeminiIaService],
-  exports: [GeminiIaService],
+  providers: [GeminiIaService, SupabaseService],
+  exports: [GeminiIaService, SupabaseService],
 })
 export class GeminiIaModule { }

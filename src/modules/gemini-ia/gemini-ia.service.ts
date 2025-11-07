@@ -7,6 +7,10 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PosStock } from '../stores/entities/pos_stock.entity';
 import { PosSale } from '../web/admin-store/pos/entities/pos-sale.entity';
+import { AiSearchInput } from '../app/History/entities/ai_search_input.entity';
+import { AiSearchOutput } from '../app/History/entities/ai_search_output.entity';
+import { User } from '../users/entities/user.entity';
+import { SupabaseService } from 'src/supabase.service';
 
 @Injectable()
 export class GeminiIaService {
@@ -18,14 +22,29 @@ export class GeminiIaService {
     private readonly configService: ConfigService,
     @InjectRepository(Store) private readonly storeRepo: Repository<Store>,
     @InjectRepository(PosSale) private readonly posSaleRepo: Repository<PosSale>,
-    @InjectRepository(PosStock) private readonly posStockRepo: Repository<PosStock>
+    @InjectRepository(PosStock) private readonly posStockRepo: Repository<PosStock>,
+
+    @InjectRepository(AiSearchInput)
+    private readonly inputRepo: Repository<AiSearchInput>,
+    @InjectRepository(AiSearchOutput)
+    private readonly outputRepo: Repository<AiSearchOutput>,
+
+    private readonly supabaseService: SupabaseService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) throw new Error('No se encontró la API key de Gemini');
     this.genIA = new GoogleGenerativeAI(apiKey);
   }
 
-  async analyzeText(prompt: string) {
+  async analyzeText(prompt: string, user?: User) {
+
+    const input = await this.inputRepo.save({
+      user,
+      type: 'text',
+      query: prompt,
+    });
+
+
     try {
       const model = this.genIA.getGenerativeModel({ model: this.modelIA });
       const result = await model.generateContent(`
@@ -47,36 +66,64 @@ export class GeminiIaService {
       }
 
       if (!materials.length) {
-        return {
+        const failResult = {
           success: false,
           message: 'No se pudieron identificar materiales en la solicitud.',
         };
+
+        //Guardar OUTPUT fallido
+        await this.outputRepo.save({
+          input,
+          response: failResult,
+          success: false,
+        });
+
+        return failResult;
       }
 
-      const matchingStores = await this.findStoresWithMaterials(materials);
 
-      if (!matchingStores.length) {
-        return {
+
+      const matchingStores = await this.findStoresWithMaterials(materials);
+      const successResult = !matchingStores.length
+        ? {
           success: true,
           materials,
           available: false,
           message: `No se encontraron tiendas con los productos solicitados (${materials.join(', ')}).`,
+        }
+        : {
+          success: true,
+          materials,
+          available: true,
+          stores: matchingStores,
         };
-      }
 
-      return {
+      await this.outputRepo.save({
+        input,
+        response: successResult,
         success: true,
-        materials,
-        available: true,
-        stores: matchingStores,
-      };
+      });
+
+      return successResult;
+
     } catch (error) {
       this.logger.error('Error al analizar el texto', error);
       throw new Error('Error al analizar el texto');
     }
   }
 
-  async analyzeImage(imageBuffer: Buffer, mimeType: string) {
+  async analyzeImage(imageBuffer: Buffer, mimeType: string, user?: User) {
+    const imageUrl = await this.supabaseService.uploadImage(
+      imageBuffer,
+      `analyze-${Date.now()}.${mimeType.split('/')[1]}`,
+      mimeType,
+    );
+
+    const input = await this.inputRepo.save({
+      user,
+      type: 'image',
+      query: imageUrl,
+    });
     try {
       const model = this.genIA.getGenerativeModel({ model: this.modelIA });
       const imageBase64 = imageBuffer.toString('base64');
@@ -116,41 +163,84 @@ export class GeminiIaService {
       }
 
       if (!materials.length) {
-        return {
+        const failResult = {
           success: false,
           message: 'No se pudieron identificar materiales en la imagen.',
         };
+
+        await this.outputRepo.save({
+          input,
+          response: failResult,
+          success: false,
+        });
+
+        return failResult;
       }
 
       const matchingStores = await this.findStoresWithMaterials(materials);
 
-      if (!matchingStores.length) {
-        return {
+      const successResult = !matchingStores.length
+        ? {
           success: true,
           materials,
           available: false,
           message: `No se encontraron tiendas con los productos detectados (${materials.join(', ')}).`,
+        }
+        : {
+          success: true,
+          materials,
+          available: true,
+          stores: matchingStores,
         };
-      }
 
-      return {
+      await this.outputRepo.save({
+        input,
+        response: successResult,
         success: true,
-        materials,
-        available: true,
-        stores: matchingStores,
-      };
+      });
+
+      return successResult;
     } catch (error) {
       this.logger.error('Error al analizar la imagen', error);
       throw new Error('Fallo al analizar la imagen');
     }
   }
 
-  async analyzeImageFromUrl(imageUrl: string) {
-    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-    const buffer = Buffer.from(response.data, 'binary');
-    const mimeType = imageUrl.endsWith('png') ? 'image/png' : 'image/jpeg';
-    return this.analyzeImage(buffer, mimeType);
+
+
+  async analyzeImageFromUrl(imageUrl: string, user?: User) {
+    const input = await this.inputRepo.save({
+      user,
+      type: 'image',
+      query: imageUrl,
+    });
+
+    try {
+      const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(response.data, 'binary');
+      const mimeType = imageUrl.endsWith('png') ? 'image/png' : 'image/jpeg';
+
+      const result = await this.analyzeImage(buffer, mimeType, user);
+
+      await this.outputRepo.save({
+        input,
+        response: result,
+        success: true,
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.error('Error al analizar imagen desde URL', error);
+      await this.outputRepo.save({
+        input,
+        response: { error: error.message || 'Error desconocido' },
+        success: false,
+      });
+
+      throw new Error('Fallo al analizar la imagen desde URL');
+    }
   }
+
 
   async analyzeStorePerformance(storeId: number) {
     const sales = await this.posSaleRepo
