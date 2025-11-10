@@ -4,6 +4,7 @@ import {
     Column,
     ManyToOne,
     CreateDateColumn,
+    JoinColumn,
 } from 'typeorm';
 import { AiSearchInput } from './ai_search_input.entity';
 
@@ -15,10 +16,11 @@ export class AiSearchOutput {
     @ManyToOne(() => AiSearchInput, (input) => input.outputs, {
         onDelete: 'CASCADE',
     })
+    @JoinColumn({ name: 'inputid' })
     input: AiSearchInput;
 
     @Column({ type: 'jsonb', nullable: true })
-    response?: any; // respuesta completa de la IA (puede ser array o objeto)
+    response?: any;
 
     @Column({ default: true })
     success: boolean;

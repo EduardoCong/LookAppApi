@@ -6,6 +6,7 @@ import {
     ManyToOne,
     OneToMany,
     CreateDateColumn,
+    JoinColumn,
 } from 'typeorm';
 import { AiSearchOutput } from './ai_search_output.entity';
 
@@ -16,6 +17,7 @@ export class AiSearchInput {
     id: number;
 
     @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'userid' })
     user?: User;
 
     @Column({ length: 20 })

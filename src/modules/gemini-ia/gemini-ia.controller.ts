@@ -129,7 +129,7 @@ export class GeminiIaController {
       result = await this.aiService.analyzeImage(file.buffer, file.mimetype, user);
     } else {
       source = imageUrl;
-      result = await this.aiService.analyzeImageFromUrl(imageUrl);
+      result = await this.aiService.analyzeImageFromUrl(imageUrl, user);
     }
 
     return { source, ...result };
