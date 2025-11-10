@@ -209,11 +209,6 @@ export class GeminiIaService {
 
 
   async analyzeImageFromUrl(imageUrl: string, user?: User) {
-    const input = await this.inputRepo.save({
-      user,
-      type: 'image',
-      query: imageUrl,
-    });
 
     try {
       const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
@@ -222,21 +217,9 @@ export class GeminiIaService {
 
       const result = await this.analyzeImage(buffer, mimeType, user);
 
-      await this.outputRepo.save({
-        input,
-        response: result,
-        success: true,
-      });
-
       return result;
     } catch (error) {
       this.logger.error('Error al analizar imagen desde URL', error);
-      await this.outputRepo.save({
-        input,
-        response: { error: error.message || 'Error desconocido' },
-        success: false,
-      });
-
       throw new Error('Fallo al analizar la imagen desde URL');
     }
   }

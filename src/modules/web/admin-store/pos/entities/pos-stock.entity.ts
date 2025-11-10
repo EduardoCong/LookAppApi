@@ -13,7 +13,7 @@ export class PosStock {
     @Column({ type: 'int' })
     productId: number;
 
-    @Column({ type: 'varchar', length: 150 })
+    @Column({ type: 'varchar', length: 150, nullable: true })
     productName: string;
 
     @Column({ type: 'int' })
