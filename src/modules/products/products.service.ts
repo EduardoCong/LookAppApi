@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import { GeminiIaService } from 'src/modules/gemini-ia/gemini-ia.service';
 import { ConfigService } from '@nestjs/config';
 import { Store } from '../stores/entities/store.entity';
+import { SupabaseService } from 'src/supabase.service';
 
 @Injectable()
 export class ProductsService {
@@ -23,6 +24,7 @@ export class ProductsService {
     private readonly categoryRepository: Repository<ProductCategory>,
     private readonly geminiIaService: GeminiIaService,
     private readonly configService: ConfigService,
+    private readonly supabaseService: SupabaseService,
   ) {
     this.BASE_URL =
       this.configService.get<string>('URL_PROD') || 'http://localhost:3000';
@@ -34,68 +36,53 @@ export class ProductsService {
     mimeType?: string,
     originalName?: string,
   ) {
-    const { storeId, categoryId, imageUrl } = createProductDto;
+    const { storeId, categoryId } = createProductDto;
 
     const store = await this.storeRepository.findOne({
       where: { id: storeId },
     });
     if (!store) throw new NotFoundException('La tienda especificada no existe');
 
-    let category: ProductCategory | null = null;
+    let category: ProductCategory | undefined;
     if (categoryId) {
-      category = await this.categoryRepository.findOne({
+      const foundCategory = await this.categoryRepository.findOne({
         where: { id: categoryId },
       });
-      if (!category)
+      if (!foundCategory)
         throw new NotFoundException('La categoría de producto no existe');
+      category = foundCategory;
     }
 
-    let aiDescription: string | null = null;
-    let finalImageUrl: string | null = imageUrl ?? null;
+    let finalImageUrl = '';
 
     if (imageBuffer && mimeType) {
-      const aiResult = await this.geminiIaService.analyzeImage(imageBuffer, mimeType);
+      const safeName = originalName
+        ? originalName.replace(/\s+/g, '_').replace(/[^\w.]/g, '')
+        : `product_${Date.now()}.${mimeType.split('/')[1]}`;
 
-      if ('materials' in aiResult && Array.isArray(aiResult.materials)) {
-        aiDescription = aiResult.materials.join(', ');
-      } else {
-        aiDescription = aiResult.message ?? null;
+      try {
+        finalImageUrl = await this.supabaseService.uploadImage(
+          imageBuffer,
+          `products/${safeName}`,
+          mimeType,
+        );
+      } catch (error) {
+        console.error('Error al subir imagen a Base:', error);
+        throw new InternalServerErrorException('No se pudo subir la imagen');
       }
-
-
-      const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'products');
-
-      const extension =
-        mimeType === 'image/png'
-          ? 'png'
-          : mimeType === 'image/jpeg'
-            ? 'jpg'
-            : mimeType === 'image/webp'
-              ? 'webp'
-              : 'jpg';
-
-      const fileName = `product_${Date.now()}.${extension}`;
-
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      const filePath = path.join(uploadDir, fileName);
-      fs.writeFileSync(filePath, imageBuffer);
-
-      finalImageUrl = `${this.BASE_URL}/uploads/products/${fileName}`;
     }
 
+    // Crear producto
     const product = this.productRepository.create({
       ...createProductDto,
-      aiDescription,
       imageUrl: finalImageUrl,
       store,
-      category,
-    } as any);
+      ...(category ? { category } : {}),
+    });
 
     return await this.productRepository.save(product);
   }
+
 
   async findAll() {
     return await this.productRepository.find({
