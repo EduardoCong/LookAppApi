@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { StoreStatsService } from './stats.service';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
@@ -464,5 +464,43 @@ export class StoreStatsController {
         }
     }
 
+
+    @Get('stores')
+    @ApiOperation({
+        summary: 'Lista de todas las tiendas registradas',
+        description:
+            'Devuelve un listado con información básica de todas las tiendas registradas, incluyendo nombre comercial, propietario, dirección, descripción, estado y categoría asociada.',
+    })
+    async getAllStores() {
+        try {
+            const data = await this.statsService.getAllStores();
+            return { ok: true, total: data.length, data };
+        } catch (err: any) {
+            console.error('Error fetching stores:', err.message);
+            throw new HttpException(
+                'Error al obtener las tiendas registradas',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
+
+    @Get('stores/:id/products')
+    @ApiOperation({
+        summary: 'Productos de una tienda específica',
+        description:
+            'Devuelve todos los productos pertenecientes a una tienda específica. Incluye la información de la tienda, el total de productos y los datos detallados de cada producto (nombre, descripción, precio, imagen y categoría).',
+    })
+    async getProductsByStore(@Param('id', ParseIntPipe) id: number) {
+        try {
+            const data = await this.statsService.getProductsByStore(id);
+            return { ok: true, total: data.products.length, data };
+        } catch (err: any) {
+            console.error('Error fetching store products:', err.message);
+            throw new HttpException(
+                'Error al obtener los productos de la tienda',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
 }
 
