@@ -350,4 +350,81 @@ export class StoreStatsService {
             );
         }
     }
+
+    async getAllStores() {
+        try {
+            const stores = await this.storeRepo.find({
+                relations: ['category'],
+                order: { id: 'DESC' },
+            });
+
+            if (!stores.length) {
+                throw new HttpException(
+                    'No se encontraron tiendas registradas.',
+                    HttpStatus.NOT_FOUND,
+                );
+            }
+
+            return stores.map((store) => ({
+                id: store.id,
+                business_name: store.business_name,
+                owner_name: store.owner_name,
+                address: store.address,
+                description: store.description,
+                status: store.status,
+                is_verified: store.is_verified,
+                category: store.category ? store.category.name : null,
+            }));
+        } catch (error) {
+            console.error('Error al obtener todas las tiendas:', error);
+            throw new HttpException(
+                'Error al listar las tiendas.',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
+
+    async getProductsByStore(storeId: number) {
+        try {
+            const store = await this.storeRepo.findOne({
+                where: { id: storeId },
+                relations: ['category'],
+            });
+
+            if (!store) {
+                throw new NotFoundException('La tienda especificada no existe');
+            }
+
+            const products = await this.productRepo.find({
+                where: { store: { id: storeId } },
+                relations: ['category'],
+                order: { id: 'DESC' },
+            });
+
+            return {
+                store: {
+                    id: store.id,
+                    business_name: store.business_name,
+                    category: store.category ? store.category.name : null,
+                },
+                total_products: products.length,
+                products: products.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    description: p.description,
+                    price: p.price,
+                    stock: p.stock,
+                    imageUrl: p.imageUrl,
+                    category: p.category ? p.category.name : null,
+                })),
+            };
+        } catch (error) {
+            console.error('Error al obtener productos por tienda:', error);
+            throw new HttpException(
+                'Error al listar los productos de la tienda.',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
+
 }
