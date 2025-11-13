@@ -6,13 +6,17 @@ import {
     BadRequestException,
     ParseIntPipe,
     NotFoundException,
+    Post,
+    Body,
+    Patch,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { AiHistoryService } from './History/history.service';
 import type { Request } from 'express';
 import { StoresService } from '../stores/stores.service';
+import { PurchasesFullService } from './Purchases/purchases-full.service';
 
 @ApiTags('APP / Mobile')
 @Controller('app')
@@ -23,7 +27,8 @@ export class AppController {
         private readonly historyService: AiHistoryService,
         private readonly configService: ConfigService,
 
-        private readonly storesService: StoresService
+        private readonly storesService: StoresService,
+        private readonly purchasesFullService: PurchasesFullService,
     ) {
         const secret = this.configService.get<string>('JWT_SECRET');
         if (!secret) throw new Error('JWT_SECRET not found');
@@ -116,4 +121,77 @@ Este endpoint es **público**, no requiere autenticación.`,
             throw new NotFoundException('Tienda no encontrada o inactiva');
         }
     }
+
+    @Post('purchase')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Registrar compra con pago completo',
+        description: `
+Registra una compra 100% pagada por el usuario autenticado.  
+El backend valida el pago con Stripe, descuenta el stock y deja la compra en estado **pendiente de recogida**.`,
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['store_id', 'product_id', 'quantity', 'payment_method_id'],
+            properties: {
+                store_id: {
+                    type: 'number',
+                    example: 3,
+                    description: 'ID de la tienda donde se realiza la compra.',
+                },
+                product_id: {
+                    type: 'number',
+                    example: 17,
+                    description: 'ID del producto que se va a comprar.',
+                },
+                quantity: {
+                    type: 'number',
+                    example: 2,
+                    description: 'Cantidad de unidades del producto.',
+                },
+                payment_method_id: {
+                    type: 'string',
+                    example: 'pm_card_visa',
+                    description:
+                        'ID del método de pago generado por Stripe (puede usarse `pm_card_visa` en modo de prueba).',
+                },
+            },
+        },
+    })
+    async createPurchase(
+        @Req() req: Request,
+        @Body()
+        body: {
+            store_id: number;
+            product_id: number;
+            quantity: number;
+            payment_method_id: string;
+        },
+    ) {
+        const token = req.headers.authorization?.replace('Bearer ', '').trim();
+        if (!token) throw new BadRequestException('Token requerido');
+
+        const decoded: any = jwt.verify(token, this.jwtSecret);
+        const userId = decoded.sub;
+        if (!userId)
+            throw new BadRequestException('Token inválido: no contiene ID de usuario');
+
+        const { store_id, product_id, quantity, payment_method_id } = body;
+        if (!store_id || !product_id || !quantity || !payment_method_id)
+            throw new BadRequestException(
+                'Faltan datos obligatorios: store_id, product_id, quantity o payment_method_id',
+            );
+
+        const result = await this.purchasesFullService.createPurchase(
+            userId,
+            store_id,
+            product_id,
+            quantity,
+            payment_method_id,
+        );
+
+        return result;
+    }
+
 }
