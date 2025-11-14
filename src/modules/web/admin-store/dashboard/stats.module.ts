@@ -14,13 +14,17 @@ import { StoresModule } from 'src/modules/stores/stores.module';
 import { StoresService } from 'src/modules/stores/stores.service';
 import { Category } from 'src/modules/categories/entities/category.entity';
 import { StoreReportsService } from '../reports/store-reports.service';
+import { PurchasesFullService } from 'src/modules/app/Purchases/purchases-full.service';
+import { PurchaseFull } from 'src/modules/app/Purchases/entities/purchase-full.entity';
+import { PurchaseApartado } from 'src/modules/app/Purchases/entities/purchase-apartado.entity';
+import { PurchaseApartadoService } from 'src/modules/app/Purchases/purchase-apartado.service';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User, Category]),
+        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User, Category, PurchaseFull, PurchaseApartado]),
     ],
     controllers: [StoreStatsController],
-    providers: [StoreStatsService, WebStoresService, StoresService, StoreReportsService],
-    exports: [StoreStatsService, WebStoresService, StoresService, StoreReportsService],
+    providers: [StoreStatsService, WebStoresService, StoresService, StoreReportsService, PurchasesFullService, PurchaseApartadoService],
+    exports: [StoreStatsService, WebStoresService, StoresService, StoreReportsService, PurchasesFullService, PurchaseApartadoService],
 })
 export class StoreStatsModule { }

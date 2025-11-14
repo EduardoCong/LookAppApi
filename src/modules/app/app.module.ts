@@ -14,13 +14,15 @@ import { Store } from '../stores/entities/store.entity';
 import { PurchasesFullService } from './Purchases/purchases-full.service';
 import { PurchaseFull } from './Purchases/entities/purchase-full.entity';
 import { Product } from '../products/entities/product.entity';
+import { PurchaseApartadoService } from './Purchases/purchase-apartado.service';
+import { PurchaseApartado } from './Purchases/entities/purchase-apartado.entity';
 
 @Module({
     imports: [
         ConfigModule,
-        TypeOrmModule.forFeature([AiSearchInput, AiSearchOutput, Store, StoreDetail, Category, User, PurchaseFull, Product]),
+        TypeOrmModule.forFeature([AiSearchInput, AiSearchOutput, Store, StoreDetail, Category, User, PurchaseFull, Product, PurchaseApartado]),
     ],
     controllers: [AppController],
-    providers: [AiHistoryService, StoresService, PurchasesFullService],
+    providers: [AiHistoryService, StoresService, PurchasesFullService, PurchaseApartadoService],
 })
 export class AppMobileModule { }

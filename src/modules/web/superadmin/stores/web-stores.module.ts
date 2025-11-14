@@ -13,9 +13,11 @@ import { AdminStoresService } from 'src/modules/web-admin/stores/admin-stores.se
 import { StoreReviewLog } from 'src/modules/web-admin/stores/entities/store-review-log.entity';
 import { StoresService } from 'src/modules/stores/stores.service';
 import { Category } from 'src/modules/categories/entities/category.entity';
+import { PurchaseFull } from 'src/modules/app/Purchases/entities/purchase-full.entity';
+import { PurchaseApartado } from 'src/modules/app/Purchases/entities/purchase-apartado.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Store, StoreDetail, User, StoreSubscription, PosSale, PosStock, StoreReviewLog, Category]), ConfigModule],
+    imports: [TypeOrmModule.forFeature([Store, StoreDetail, User, StoreSubscription, PosSale, PosStock, StoreReviewLog, Category, PurchaseFull, PurchaseApartado]), ConfigModule],
     controllers: [WebStoresController],
     providers: [WebStoresService, AdminStoresService, StoresService],
 })

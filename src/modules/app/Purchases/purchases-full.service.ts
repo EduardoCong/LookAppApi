@@ -81,9 +81,6 @@ export class PurchasesFullService {
                     allow_redirects: 'never',
                 },
             });
-
-
-            console.log('PaymentIntent creado:', paymentIntent);
         } catch (err: any) {
             throw new HttpException(
                 `Error al procesar el pago con Stripe: ${err.message}`,
@@ -130,4 +127,83 @@ export class PurchasesFullService {
             },
         };
     }
+
+    async markPurchaseAsPicked(storeId: number, purchaseId: number) {
+        const purchase = await this.purchaseRepo.findOne({
+            where: { id: purchaseId, store: { id: storeId } },
+            relations: ['product', 'store', 'user'],
+        });
+
+        if (!purchase) {
+            throw new NotFoundException('Compra no encontrada en esta tienda');
+        }
+
+        if (purchase.status === 'recogido') {
+            throw new BadRequestException('Esta compra ya está marcada como recogida');
+        }
+
+        if (purchase.status !== 'pendiente') {
+            throw new BadRequestException(
+                `No puedes marcar como recogida una compra con estado "${purchase.status}"`
+            );
+        }
+
+        purchase.status = 'recogido';
+        await this.purchaseRepo.save(purchase);
+
+        return {
+            purchase_id: purchase.id,
+            product: purchase.product.name,
+            store: purchase.store.business_name,
+            user: purchase.user.name,
+            pickup_date: purchase.updated_at,
+        };
+    }
+
+    async getPurchasesByStatus(userId: number, status?: string) {
+        // 1. Validar estatus si viene
+        const validStatuses = ['pendiente', 'recogido'];
+
+        if (status && !validStatuses.includes(status)) {
+            throw new BadRequestException(
+                `El estatus debe ser uno de: ${validStatuses.join(', ')}`
+            );
+        }
+
+        // 2. Construir query
+        const query = this.purchaseRepo
+            .createQueryBuilder('purchase')
+            .leftJoinAndSelect('purchase.product', 'product')
+            .leftJoinAndSelect('purchase.store', 'store')
+            .leftJoinAndSelect('purchase.user', 'user')
+            .where('purchase.user_id = :userId', { userId });
+
+        // 3. Si viene status, se filtra
+        if (status) {
+            query.andWhere('purchase.status = :status', { status });
+        }
+
+        query.orderBy('purchase.created_at', 'DESC');
+
+        const purchases = await query.getMany();
+
+        return purchases;
+    }
+
+    async getPurchaseById(userId: number, purchaseId: number) {
+        const purchase = await this.purchaseRepo.findOne({
+            where: { id: purchaseId },
+            relations: ['user', 'store', 'product'],
+        });
+
+        if (!purchase) throw new NotFoundException('Compra no encontrada');
+
+        if (purchase.user.id !== userId) {
+            throw new BadRequestException('No tienes permiso para ver esta compra');
+        }
+
+        return purchase;
+    }
+
+
 }
