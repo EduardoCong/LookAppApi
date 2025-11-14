@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Store, StoreStatus } from './entities/store.entity';
@@ -187,4 +187,37 @@ export class StoresService {
             throw new NotFoundException('Detalle de tienda no encontrado');
         return store.detail;
     }
+
+    async getNearestStore(lat: number, lng: number, radiusKm: number = 6) {
+    if (!lat || !lng) throw new BadRequestException('Lat/Lng requeridos');
+
+    return this.storeRepo.query(
+      `
+      SELECT 
+        s.*,
+        (
+          6371 * acos(
+            cos(radians($1)) 
+            * cos(radians(s.latitude::float)) 
+            * cos(radians(s.longitude::float) - radians($2)) 
+            + sin(radians($1)) 
+            * sin(radians(s.latitude::float))
+          )
+        ) AS distance
+      FROM stores s
+      WHERE s.status = 'active'
+      HAVING (
+        6371 * acos(
+          cos(radians($1)) 
+          * cos(radians(s.latitude::float)) 
+          * cos(radians(s.longitude::float) - radians($2)) 
+          + sin(radians($1)) 
+          * sin(radians(s.latitude::float))
+        )
+      ) <= $3
+      ORDER BY distance ASC;
+      `,
+      [lat, lng, radiusKm],
+    );
+  }
 }

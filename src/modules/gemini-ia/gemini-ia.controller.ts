@@ -20,7 +20,8 @@ import * as jwt from 'jsonwebtoken';
 @Controller('analyze')
 export class GeminiIaController {
   private readonly jwtSecret: string;
-  constructor(private readonly aiService: GeminiIaService,
+  constructor(
+    private readonly aiService: GeminiIaService,
     private readonly configService: ConfigService,
   ) {
     const secret = this.configService.get<string>('JWT_SECRET');
@@ -29,55 +30,43 @@ export class GeminiIaController {
   }
 
   @Post('text')
-  async analyzeText(@Req() req: Request, @Body() AnalizeTextDto: AnalizeTextDto) {
-    const { prompt } = AnalizeTextDto;
+  async analyzeText(@Req() req: Request, @Body() dto: AnalizeTextDto) {
+    const { prompt, lat, lng } = dto;
 
     const authHeader = req.headers.authorization;
-    if (!authHeader) throw new BadRequestException('Missing Authorization header');
+    if (!authHeader)
+      throw new BadRequestException('Missing Authorization header');
     const token = authHeader.replace('Bearer ', '').trim();
-
     const decoded: any = jwt.verify(token, this.jwtSecret);
-    const user = { id: decoded.sub } as any;
 
-    const result = await this.aiService.analyzeText(prompt, user);
+    const location = lat && lng ? { lat, lng } : undefined;
+
+    const result = await this.aiService.analyzeText(prompt, location);
     return { success: true, result };
   }
 
   @Post('photo')
-  @UseInterceptors(
-    FileInterceptor('image', {
-      storage: memoryStorage(),
-      fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) cb(null, true);
-        else cb(new BadRequestException('Solo se permiten imágenes'), false);
-      },
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
-  )
-  async analyzePhoto(@Req() req: Request, @UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new BadRequestException('La foto es obligatoria');
-
+  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
+  async analyzePhoto(
+    @Req() req: Request,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { lat?: number; lng?: number },
+  ) {
     const authHeader = req.headers.authorization;
-    if (!authHeader) throw new BadRequestException('Missing Authorization header');
+    if (!authHeader)
+      throw new BadRequestException('Missing Authorization header');
     const token = authHeader.replace('Bearer ', '').trim();
-
     const decoded: any = jwt.verify(token, this.jwtSecret);
-    if (!decoded?.sub) {
-      throw new BadRequestException('Invalid or malformed token: missing user ID');
-    }
 
-    const user = { id: decoded.sub } as any;
+    const location =
+      body.lat && body.lng ? { lat: body.lat, lng: body.lng } : undefined;
 
     const result = await this.aiService.analyzeImage(
       file.buffer,
       file.mimetype,
-      user
+      location,
     );
-
-    return {
-      source: file.originalname,
-      ...result,
-    };
+    return { source: file.originalname, ...result };
   }
 
   @Post('imagen')
@@ -111,12 +100,15 @@ export class GeminiIaController {
     }
 
     const authHeader = req.headers.authorization;
-    if (!authHeader) throw new BadRequestException('Missing Authorization header');
+    if (!authHeader)
+      throw new BadRequestException('Missing Authorization header');
 
     const token = authHeader.replace('Bearer ', '').trim();
     const decoded: any = jwt.verify(token, this.jwtSecret);
     if (!decoded?.sub) {
-      throw new BadRequestException('Invalid or malformed token: missing user ID');
+      throw new BadRequestException(
+        'Invalid or malformed token: missing user ID',
+      );
     }
 
     const user = { id: decoded.sub } as any;
@@ -126,7 +118,11 @@ export class GeminiIaController {
 
     if (file) {
       source = file.originalname;
-      result = await this.aiService.analyzeImage(file.buffer, file.mimetype, user);
+      result = await this.aiService.analyzeImage(
+        file.buffer,
+        file.mimetype,
+        user,
+      );
     } else {
       source = imageUrl;
       result = await this.aiService.analyzeImageFromUrl(imageUrl, user);

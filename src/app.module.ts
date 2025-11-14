@@ -16,6 +16,7 @@ import { WebStoresModule } from './modules/web/superadmin/stores/web-stores.modu
 import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.module';
 import { DatabaseService } from './database/database.service';
 import { AppMobileModule } from './modules/app/app.module';
+import { ModesModule } from './modules/modes/modes.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AppMobileModule } from './modules/app/app.module';
     ProductsModule,
     // AdminStoresModule,
     GeminiIaModule,
+    ModesModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
