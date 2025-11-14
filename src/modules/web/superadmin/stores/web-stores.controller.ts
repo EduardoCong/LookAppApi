@@ -122,4 +122,9 @@ export class WebStoresController {
             data: store,
         };
     }
+
+    @Get('store/:id/stats')
+    async getStoreStats(@Param('id') id: number) {
+        return this.service.getStoreStats(id);
+    }
 }

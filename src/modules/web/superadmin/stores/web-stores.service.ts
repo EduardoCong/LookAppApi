@@ -11,6 +11,8 @@ import { StoreSubscription } from 'src/modules/stores/entities/store-subscriptio
 import { PosSale } from '../../admin-store/pos/entities/pos-sale.entity';
 import { PosStock } from '../../admin-store/pos/entities/pos-stock.entity';
 import { faker } from '@faker-js/faker';
+import { PurchaseFull } from 'src/modules/app/Purchases/entities/purchase-full.entity';
+import { PurchaseApartado } from 'src/modules/app/Purchases/entities/purchase-apartado.entity';
 
 @Injectable()
 export class WebStoresService {
@@ -20,6 +22,10 @@ export class WebStoresService {
         @InjectRepository(Store) private readonly storeRepo: Repository<Store>,
         @InjectRepository(User) private readonly userRepo: Repository<User>,
         @InjectRepository(StoreDetail) private readonly detailRepo: Repository<StoreDetail>,
+        @InjectRepository(PurchaseFull)
+        private readonly purchaseFullRepo: Repository<PurchaseFull>,
+        @InjectRepository(PurchaseApartado)
+        private readonly apartadoRepo: Repository<PurchaseApartado>,
         @InjectRepository(StoreSubscription)
         private readonly subRepo: Repository<StoreSubscription>,
 
@@ -304,4 +310,126 @@ export class WebStoresService {
         }
 
     }
+
+    async getStoreStats(storeId: number) {
+        const store = await this.storeRepo.findOne({ where: { id: storeId } });
+        if (!store) {
+            throw new HttpException('Tienda no encontrada', HttpStatus.NOT_FOUND);
+        }
+
+        // ------------------------------------------
+        // 1. FULL PURCHASES RECOGIDAS
+        // ------------------------------------------
+        const fullPicked = await this.purchaseFullRepo.find({
+            where: { store: { id: storeId }, status: 'recogido' },
+            relations: ['product'],
+        });
+
+        // ------------------------------------------
+        // 2. APARTADOS LIQUIDADOS O RECOGIDOS
+        // ------------------------------------------
+        const apartadoDelivered = await this.apartadoRepo.find({
+            where: { store: { id: storeId }, status: 'recogido' },
+            relations: ['product'],
+        });
+
+        const apartadoLiquidado = await this.apartadoRepo.find({
+            where: { store: { id: storeId }, status: 'liquidado' },
+            relations: ['product'],
+        });
+
+        // ------------------------------------------
+        // TOTAL SALES
+        // ------------------------------------------
+        const total_sales =
+            fullPicked.length + apartadoDelivered.length;
+
+        // ------------------------------------------
+        // TOTAL REVENUE
+        // ------------------------------------------
+        const revenueFull = fullPicked.reduce((sum, p) => sum + Number(p.total_price), 0);
+        const revenueApartado = [...apartadoDelivered, ...apartadoLiquidado]
+            .reduce((sum, p) => sum + Number(p.monto_pagado), 0);
+
+        const total_revenue = revenueFull + revenueApartado;
+
+        // ------------------------------------------
+        // AVERAGE RATING (0 si no hay tabla)
+        // ------------------------------------------
+        let average_rating = 0;
+        try {
+            const ratings = await this.saleRepo.manager.query(
+                `SELECT COALESCE(AVG(rating),0) AS avg FROM product_ratings WHERE store_id = $1`,
+                [storeId]
+            );
+            average_rating = Number(ratings[0]?.avg || 0);
+        } catch {
+            average_rating = 0;
+        }
+
+        // ------------------------------------------
+        // VISITS (0 si no hay tabla)
+        // ------------------------------------------
+        let visits = 0;
+        try {
+            const v = await this.saleRepo.manager.query(
+                `SELECT COUNT(*) AS v FROM store_visits WHERE store_id = $1`,
+                [storeId],
+            );
+            visits = Number(v[0]?.v || 0);
+        } catch {
+            visits = 0;
+        }
+
+        // ------------------------------------------
+        // TOP PRODUCT
+        // ------------------------------------------
+        const allProducts = [
+            ...fullPicked.map(p => ({ id: p.product.id, qty: p.quantity, name: p.product.name })),
+            ...apartadoDelivered.map(p => ({ id: p.product.id, qty: p.quantity, name: p.product.name })),
+            ...apartadoLiquidado.map(p => ({ id: p.product.id, qty: p.quantity, name: p.product.name })),
+        ];
+
+        const productTotals = new Map();
+
+        allProducts.forEach(p => {
+            productTotals.set(p.id, (productTotals.get(p.id) || 0) + p.qty);
+        });
+
+        const topEntry = [...productTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+        const top_product = topEntry ? allProducts.find(p => p.id === topEntry[0])?.name : null;
+
+        // ------------------------------------------
+        // WEEKLY SALES (últimos 7 días)
+        // ------------------------------------------
+        const now = new Date();
+        const weekly_sales = Array.from({ length: 7 }).map((_, i) => {
+            const day = new Date(now);
+            day.setDate(now.getDate() - i);
+
+            const f = (d: Date) => d.toISOString().split('T')[0];
+
+            const fullCount = fullPicked.filter(p => f(p.updated_at) === f(day)).length;
+            const apartadoCount =
+                apartadoDelivered.filter(p => f(p.updated_at) === f(day)).length +
+                apartadoLiquidado.filter(p => f(p.updated_at) === f(day)).length;
+
+            return fullCount + apartadoCount;
+        }).reverse(); // de más antiguo a más reciente
+
+        return {
+            ok: true,
+            data: {
+                total_sales,
+                total_revenue,
+                average_rating,
+                visits,
+                top_product,
+                weekly_sales,
+            },
+        };
+    }
+
+
+
 }

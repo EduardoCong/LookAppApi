@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { StoreStatsService } from './stats.service';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
@@ -8,6 +8,8 @@ import { WebStoresService } from '../../superadmin/stores/web-stores.service';
 import { RegisterStoreDto } from '../../superadmin/stores/dto/register-store.dto';
 import { Public } from 'src/common/decorators/public.decorator';
 import { StoreReportsService } from '../reports/store-reports.service';
+import { PurchasesFullService } from 'src/modules/app/Purchases/purchases-full.service';
+import { PurchaseApartadoService } from 'src/modules/app/Purchases/purchase-apartado.service';
 
 @Controller('web/stores')
 @ApiTags('WEB / Admin Store')
@@ -18,7 +20,9 @@ export class StoreStatsController {
         private readonly statsService: StoreStatsService,
         private readonly configService: ConfigService,
         private readonly service: WebStoresService,
-        private readonly reportsService: StoreReportsService
+        private readonly reportsService: StoreReportsService,
+        private readonly purchasesFullService: PurchasesFullService,
+        private readonly purchaseApartadoService: PurchaseApartadoService
     ) {
         const secret = this.configService.get<string>('JWT_SECRET');
         if (!secret) {
@@ -502,5 +506,83 @@ export class StoreStatsController {
             );
         }
     }
+
+    @ApiBearerAuth()
+    @Patch('mine/purchases-full/:id/pick')
+    @ApiOperation({
+        summary: 'Marcar compra como recogida',
+        description: 'Actualiza el estado de una compra a "recogido" y usa updated_at como fecha de recogida.'
+    })
+    async markPurchaseAsPicked(
+        @Req() req: Request,
+        @Param('id', ParseIntPipe) id: number
+    ) {
+        try {
+            const token = req.headers.authorization?.replace('Bearer ', '').trim();
+            if (!token) return { ok: false, error: 'Invalid token format' };
+
+            const decoded: any = jwt.verify(token, this.jwtSecret);
+
+            const storeId =
+                decoded.storeId ??
+                decoded.defaultStoreId ??
+                decoded.user?.store?.id ??
+                decoded.stores?.[0]?.id;
+
+            if (!storeId) {
+                throw new HttpException('No store linked to user', HttpStatus.BAD_REQUEST);
+            }
+
+            const data = await this.purchasesFullService.markPurchaseAsPicked(storeId, id);
+
+            return { ok: true, data };
+        } catch (err: any) {
+            console.error('Error marking purchase as picked:', err.message);
+            throw new HttpException(
+                err.message || 'No se pudo marcar como recogida',
+                HttpStatus.BAD_REQUEST
+            );
+        }
+    }
+
+    @Post('purchase/apartado/recoger')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Marcar un apartado como recogido',
+        description: 'Solo se puede marcar como recogido si el apartado está liquidado.',
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['apartado_id'],
+            properties: {
+                apartado_id: { type: 'number', example: 12 },
+            },
+        },
+    })
+    async recogerApartado(
+        @Req() req: Request,
+        @Body() body: { apartado_id: number }
+    ) {
+        const token = req.headers.authorization?.replace('Bearer ', '').trim();
+        if (!token) throw new BadRequestException('Token requerido');
+
+        const decoded: any = jwt.verify(token, this.jwtSecret);
+        const userId = decoded.sub;
+        if (!userId)
+            throw new BadRequestException('Token inválido: no contiene ID de usuario');
+
+        const { apartado_id } = body;
+        if (!apartado_id) {
+            throw new BadRequestException('apartado_id es requerido');
+        }
+
+        return this.purchaseApartadoService.marcarComoRecogido(
+            userId,
+            apartado_id
+        );
+    }
+
+
 }
 

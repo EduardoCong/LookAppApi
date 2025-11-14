@@ -40,4 +40,7 @@ export class User {
 
     @OneToOne(() => Store, (store) => store.user)
     store: Store;
+
+    @Column({ nullable: true })
+    stripe_customer_id?: string;
 }
