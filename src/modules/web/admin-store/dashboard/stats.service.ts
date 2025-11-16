@@ -1,4 +1,4 @@
-import { Get, HttpException, HttpStatus, Injectable, NotFoundException, Query, Req } from '@nestjs/common';
+import { BadRequestException, Get, HttpException, HttpStatus, Injectable, NotFoundException, Query, Req } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { PosSale } from 'src/modules/web/admin-store/pos/entities/pos-sale.entity';
@@ -271,22 +271,54 @@ export class StoreStatsService {
 
         const { userData, storeData, detailData } = body;
 
-        //  Actualiza usuario
         if (userData) {
-            await this.userRepo.update(user.id, userData);
+            // Validación de email único
+            if (userData.email && userData.email !== user.email) {
+                const existingEmail = await this.userRepo.findOne({
+                    where: { email: userData.email },
+                });
+
+                if (existingEmail && existingEmail.id !== user.id) {
+                    throw new BadRequestException('El correo ya está en uso por otro usuario.');
+                }
+            }
+
+            // Validación de username único
+            if (userData.username && userData.username !== user.username) {
+                const existingUser = await this.userRepo.findOne({
+                    where: { username: userData.username },
+                });
+
+                if (existingUser && existingUser.id !== user.id) {
+                    throw new BadRequestException('El nombre de usuario ya está en uso.');
+                }
+            }
+
+            // Aplicar cambios y guardar (mejor que update)
+            Object.assign(user, userData);
+            await this.userRepo.save(user);
         }
 
-        //  Actualiza tienda
         if (storeData) {
             const store = await this.storeRepo.findOne({
                 where: { id: user.store.id },
                 relations: ['category'],
             });
-            if (!store) throw new NotFoundException('Tienda no encontrada');
 
+            if (!store) {
+                throw new NotFoundException('Tienda no encontrada');
+            }
+
+            // Si se envía category_id, actualizar categoría
             if (storeData.category_id) {
-                const category = await this.categoryRepo.findOneBy({ id: storeData.category_id });
-                if (!category) throw new NotFoundException('Categoría no encontrada');
+                const category = await this.categoryRepo.findOneBy({
+                    id: storeData.category_id,
+                });
+
+                if (!category) {
+                    throw new NotFoundException('Categoría no encontrada');
+                }
+
                 store.category = category;
                 delete storeData.category_id;
             }
@@ -295,8 +327,6 @@ export class StoreStatsService {
             await this.storeRepo.save(store);
         }
 
-
-        // Actualiza detalle de tienda
         if (detailData) {
             await this.storesService.updateDetail(user.store.id, detailData);
         }
@@ -306,6 +336,7 @@ export class StoreStatsService {
             message: 'Perfil y tienda actualizados correctamente',
         };
     }
+
 
     async getAllSubscriptions() {
         try {

@@ -583,6 +583,80 @@ export class StoreStatsController {
         );
     }
 
+    @ApiBearerAuth()
+    @Patch('mine/subscription/switch')
+    @ApiOperation({
+        summary: 'Cambiar plan de suscripción',
+        description: `
+Permite que una tienda cambie su plan de Stripe (por ejemplo de Básico a Premium o viceversa).  
+El endpoint extrae el storeId del token y envía la solicitud al servicio de Stripe.  
+Realiza prorrateo automático según la configuración de Stripe.
+    `,
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['new_plan_id'],
+            properties: {
+                new_plan_id: {
+                    type: 'string',
+                    example: 'premium',
+                    description: 'Nuevo plan de suscripción: basico | premium',
+                },
+            },
+        },
+    })
+    async switchSubscriptionPlan(
+        @Req() req: Request,
+        @Body() body: { new_plan_id: string },
+    ) {
+        try {
+            // 1. Extraer token
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                throw new HttpException('No authorization header provided', HttpStatus.UNAUTHORIZED);
+            }
+
+            const token = authHeader.replace('Bearer ', '').trim();
+            const decoded: any = jwt.verify(token, this.jwtSecret);
+
+            // 2. Determinar storeId
+            const storeId =
+                decoded.storeId ??
+                decoded.defaultStoreId ??
+                decoded.user?.store?.id ??
+                decoded.stores?.[0]?.id;
+
+            if (!storeId) {
+                throw new HttpException('No store linked to user', HttpStatus.BAD_REQUEST);
+            }
+
+            if (!body.new_plan_id) {
+                throw new HttpException(
+                    'Falta el campo obligatorio new_plan_id',
+                    HttpStatus.BAD_REQUEST,
+                );
+            }
+
+            // 3. Llamar al servicio
+            const result = await this.service.switchPlan({
+                store_id: storeId,
+                new_plan_id: body.new_plan_id,
+            });
+
+            return {
+                ok: true,
+                message: 'Plan actualizado correctamente',
+                data: result.data ?? result,
+            };
+        } catch (err: any) {
+            console.error('Error switching plan:', err.message);
+            throw new HttpException(
+                err.message || 'No se pudo cambiar el plan de suscripción',
+                HttpStatus.BAD_REQUEST,
+            );
+        }
+    }
 
 }
 

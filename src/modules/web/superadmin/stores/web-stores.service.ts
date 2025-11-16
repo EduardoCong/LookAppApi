@@ -430,6 +430,103 @@ export class WebStoresService {
         };
     }
 
+    async switchPlan(body: any) {
+        const { store_id, new_plan_id } = body;
 
+        if (!store_id || !new_plan_id) {
+            throw new HttpException(
+                'store_id y new_plan_id son obligatorios.',
+                HttpStatus.BAD_REQUEST,
+            );
+        }
 
+        const subscription = await this.subRepo.findOne({
+            where: { store: { id: store_id } },
+        });
+
+        if (!subscription) {
+            throw new HttpException(
+                'No existe una suscripción activa para esta tienda.',
+                HttpStatus.NOT_FOUND,
+            );
+        }
+
+        const newPriceId = this.getPriceId(new_plan_id);
+
+        if (!subscription.stripe_subscription_id || !subscription.stripe_customer_id) {
+            throw new HttpException(
+                'La suscripción Stripe no tiene IDs válidos.',
+                HttpStatus.BAD_REQUEST,
+            );
+        }
+
+        try {
+            const stripeSubscriptionId = subscription.stripe_subscription_id;
+            const stripeCustomerId = subscription.stripe_customer_id;
+
+            const canceled = await this.stripe.subscriptions.cancel(
+                stripeSubscriptionId,
+                {
+                    invoice_now: false,
+                    prorate: false,
+                }
+            );
+
+            console.log('CANCELED SUB =>', canceled.id);
+
+            const newSub = await this.stripe.subscriptions.create({
+                customer: stripeCustomerId,
+                items: [{ price: newPriceId }],
+                expand: ['latest_invoice'],
+            });
+
+            const inv =
+                typeof newSub.latest_invoice === 'object'
+                    ? (newSub.latest_invoice as any)
+                    : null;
+
+            const periodStart =
+                inv?.period_start
+                    ? new Date(inv.period_start * 1000)
+                    : newSub.start_date
+                        ? new Date(newSub.start_date * 1000)
+                        : undefined;
+
+            const periodEnd =
+                inv?.period_end
+                    ? new Date(inv.period_end * 1000)
+                    : undefined;
+
+            const invoicePdf = inv?.invoice_pdf ?? null;
+
+            subscription.stripe_subscription_id = newSub.id;
+            subscription.price_id = newPriceId;
+            subscription.plan_key = new_plan_id;
+            subscription.status = newSub.status;
+            subscription.current_period_start = periodStart;
+            subscription.current_period_end = periodEnd;
+
+            await this.subRepo.save(subscription);
+
+            return {
+                ok: true,
+                message: 'Plan cambiado correctamente.',
+                data: {
+                    subscription_id: newSub.id,
+                    new_plan: new_plan_id,
+                    status: newSub.status,
+                    period_start: periodStart,
+                    period_end: periodEnd,
+                    invoice_pdf: invoicePdf,
+                },
+            };
+
+        } catch (error: any) {
+            console.error('Error switching plan:', error);
+            throw new HttpException(
+                error.message || 'No se pudo cambiar el plan.',
+                HttpStatus.BAD_REQUEST,
+            );
+        }
+    }
 }
