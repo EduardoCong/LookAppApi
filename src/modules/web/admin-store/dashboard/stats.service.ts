@@ -11,6 +11,7 @@ import { User } from 'src/modules/users/entities/user.entity';
 import { StoresService } from 'src/modules/stores/stores.service';
 import { StoreReportsService } from '../reports/store-reports.service';
 import { Category } from 'src/modules/categories/entities/category.entity';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class StoreStatsService {
@@ -241,6 +242,8 @@ export class StoreStatsService {
                 status: user.store.status,
                 is_verified: user.store.is_verified,
                 category: user.store.category ? user.store.category.name : null,
+                latitud: user.store.latitude,
+                longitud: user.store.longitude,
             },
             detail: user.store.detail ? {
                 id: user.store.detail.id,
@@ -272,7 +275,12 @@ export class StoreStatsService {
         const { userData, storeData, detailData } = body;
 
         if (userData) {
-            // Validación de email único
+            // Normalizar email si viene
+            if (userData.email) {
+                userData.email = userData.email.toLowerCase().trim();
+            }
+
+            // Validación email único
             if (userData.email && userData.email !== user.email) {
                 const existingEmail = await this.userRepo.findOne({
                     where: { email: userData.email },
@@ -283,7 +291,7 @@ export class StoreStatsService {
                 }
             }
 
-            // Validación de username único
+            // Validación username único
             if (userData.username && userData.username !== user.username) {
                 const existingUser = await this.userRepo.findOne({
                     where: { username: userData.username },
@@ -294,7 +302,11 @@ export class StoreStatsService {
                 }
             }
 
-            // Aplicar cambios y guardar (mejor que update)
+            // HASH DEL PASSWORD SI SE ENVÍA
+            if (userData.password) {
+                userData.password = await bcrypt.hash(userData.password, 10);
+            }
+
             Object.assign(user, userData);
             await this.userRepo.save(user);
         }
@@ -305,11 +317,8 @@ export class StoreStatsService {
                 relations: ['category'],
             });
 
-            if (!store) {
-                throw new NotFoundException('Tienda no encontrada');
-            }
+            if (!store) throw new NotFoundException('Tienda no encontrada');
 
-            // Si se envía category_id, actualizar categoría
             if (storeData.category_id) {
                 const category = await this.categoryRepo.findOneBy({
                     id: storeData.category_id,
@@ -336,6 +345,7 @@ export class StoreStatsService {
             message: 'Perfil y tienda actualizados correctamente',
         };
     }
+
 
 
     async getAllSubscriptions() {
