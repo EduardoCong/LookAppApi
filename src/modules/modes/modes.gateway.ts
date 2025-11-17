@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ModesService } from './modes.service';
+import { UsePipes, ValidationPipe } from '@nestjs/common';
 import { UserLocationDto } from './dto/user.location';
 
 @WebSocketGateway({ cors: { origin: '*' } })
@@ -22,37 +23,20 @@ export class ModesGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleConnection(client: Socket) {
     this.socketUserMap.set(client.id, null);
-    //console.log('Socket connected', client.id);
   }
 
   handleDisconnect(client: Socket) {
     this.socketUserMap.delete(client.id);
-    //console.log('Socket disconnected', client.id);
   }
 
   @SubscribeMessage('userLocation')
+  @UsePipes(new ValidationPipe({ transform: true}))
   async handleUserLocation(
-    @MessageBody()
-    payload: Partial<
-      UserLocationDto & { userId?: string; maxDistance?: number }
-    >,
+    @MessageBody() payload: UserLocationDto,
     @ConnectedSocket() client: Socket,
   ) {
-    const lat = Number(payload.lat);
-    const lng = Number(payload.lng);
-
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      client.emit('modeChange', { error: 'invalid_location' });
-      return;
-    }
-
-    const location: UserLocationDto = { lat, lng };
-
-    const result = await this.modesService.detectMode(
-      location,
-      payload.maxDistance,
-    );
-
+    const result = await this.modesService.detectMode(payload);
     client.emit('modeChange', result);
+    console.log(result);
   }
 }

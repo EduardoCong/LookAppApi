@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Repository } from 'typeorm';
@@ -12,17 +12,24 @@ import { AiSearchInput } from '../app/History/entities/ai_search_input.entity';
 import { AiSearchOutput } from '../app/History/entities/ai_search_output.entity';
 import { SupabaseService } from 'src/supabase.service';
 import { UserLocationDto } from '../modes/dto/user.location';
+import { StoresService } from '../stores/stores.service';
+import {
+  DISTANCE_NEARBY_STORES,
+  DISTANCE_STORE_MODE,
+} from 'src/config/constats';
+import { ModesService } from '../modes/modes.service';
 
 @Injectable()
 export class GeminiIaService {
   private readonly logger = new Logger(GeminiIaService.name);
-  private readonly storeRadius = 5;
-  private readonly generalRadius = 5000;
   private genIA: GoogleGenerativeAI;
-  private modelIA: string = 'gemini-2.5-pro';
+  //private modelIA = 'gemini-2.5-pro';
+  private modelIA = "gemini-2.0-flash";
 
   constructor(
     private readonly configService: ConfigService,
+    private readonly storesService: StoresService,
+    private readonly modesService: ModesService,
     @InjectRepository(Store) private readonly storeRepo: Repository<Store>,
     @InjectRepository(PosSale)
     private readonly posSaleRepo: Repository<PosSale>,
@@ -35,115 +42,112 @@ export class GeminiIaService {
     private readonly supabaseService: SupabaseService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey) throw new Error('No se encontró la API key de Gemini');
+    if (!apiKey) throw new Error('No se encontró GEMINI_API_KEY');
+
     this.genIA = new GoogleGenerativeAI(apiKey);
   }
 
   async analyzeText(prompt: string, location?: UserLocationDto) {
-    const input = await this.inputRepo.save({
-      type: 'text',
-      query: prompt,
-    });
+    const input = await this.inputRepo.save({ type: 'text', query: prompt });
 
     try {
       const materials = await this.extractMaterialsFromPrompt(prompt);
-
       if (!materials.length) {
         return this.saveAndReturn(
           input,
           {
             success: false,
-            message: 'No se pudieron identificar materiales en la solicitud.',
+            message: 'No se identificaron materiales.',
           },
           false,
         );
       }
 
-      const stores = await this.getStoresForMaterials(materials, location);
+      const stores = await this.resolveStoresForMaterials(materials, location);
+      const modeInfo = await this.getUserMode(location);
 
-      const successResult = stores.length
-        ? { success: true, materials, available: true, stores }
-        : {
-            success: true,
-            materials,
-            available: false,
-            message: `No se encontraron tiendas con los productos solicitados (${materials.join(
-              ', ',
-            )}).`,
-          };
-
-      return this.saveAndReturn(input, successResult, true);
+      return this.saveAndReturn(
+        input,
+        {
+          mode: modeInfo.mode,
+          distance: modeInfo.distance,
+          success: true,
+          materials,
+          available: stores.length > 0,
+          stores: stores.length > 0 ? stores : [],
+          message:
+            stores.length === 0
+              ? `No hay tiendas con ${materials.join(', ')}`
+              : undefined,
+        },
+        true,
+      );
     } catch (error) {
-      this.logger.error('Error al analizar el texto', error);
-      throw new Error('Error al analizar el texto');
+      this.logger.error('Error al analizar texto', error);
+      throw new Error('Error al analizar texto');
     }
   }
 
-  async analyzeImage(imageBuffer: Buffer, mimeType: string, location?: UserLocationDto) {
+  async analyzeImage(buffer: Buffer, mime: string, location?: UserLocationDto) {
     const imageUrl = await this.supabaseService.uploadImage(
-      imageBuffer,
-      `analyze-${Date.now()}.${mimeType.split('/')[1]}`,
-      mimeType,
+      buffer,
+      `analyze-${Date.now()}.${mime.split('/')[1]}`,
+      mime,
     );
 
-    const input = await this.inputRepo.save({
-      type: 'image',
-      query: imageUrl,
-    });
+    const input = await this.inputRepo.save({ type: 'image', query: imageUrl });
 
     try {
-      const imageBase64 = imageBuffer.toString('base64');
-      const materials = await this.extractMaterialsFromImage(
-        imageBase64,
-        mimeType,
-      );
+      const base64 = buffer.toString('base64');
+      const materials = await this.extractMaterialsFromImage(base64, mime);
 
       if (!materials.length) {
         return this.saveAndReturn(
           input,
           {
             success: false,
-            message: 'No se pudieron identificar materiales en la imagen.',
+            message: 'No se identificaron materiales en la imagen.',
           },
           false,
         );
       }
 
-      const stores = await this.getStoresForMaterials(materials, location);
+      const stores = await this.resolveStoresForMaterials(materials, location);
 
-      const successResult = stores.length
-        ? { success: true, materials, available: true, stores }
-        : {
-            success: true,
-            materials,
-            available: false,
-            message: `No se encontraron tiendas con los productos detectados (${materials.join(
-              ', ',
-            )}).`,
-          };
-
-      return this.saveAndReturn(input, successResult, true);
+      return this.saveAndReturn(
+        input,
+        stores.length
+          ? { success: true, materials, available: true, stores }
+          : {
+              success: true,
+              materials,
+              available: false,
+              message: `No hay tiendas con ${materials.join(', ')}`,
+            },
+        true,
+      );
     } catch (error) {
-      this.logger.error('Error al analizar la imagen', error);
-      throw new Error('Fallo al analizar la imagen');
+      this.logger.error('Error al analizar imagen', error);
+      throw new Error('Fallo al analizar imagen');
     }
   }
 
-  async analyzeImageFromUrl(imageUrl: string, location?: UserLocationDto) {
+  async analyzeImageFromUrl(url: string, location?: UserLocationDto) {
     try {
-      const response = await axios.get(imageUrl, {
-        responseType: 'arraybuffer',
-      });
-      const buffer = Buffer.from(response.data, 'binary');
-      const mimeType = imageUrl.endsWith('png') ? 'image/png' : 'image/jpeg';
-      return this.analyzeImage(buffer, mimeType, location);
+      const response = await axios.get(url, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(response.data);
+      const mime = url.endsWith('png') ? 'image/png' : 'image/jpeg';
+      return this.analyzeImage(buffer, mime, location);
     } catch (error) {
-      this.logger.error('Error al analizar imagen desde URL', error);
-      throw new Error('Fallo al analizar la imagen desde URL');
+      this.logger.error('Error leyendo imagen desde URL', error);
+      throw new Error('Fallo al analizar imagen desde URL');
     }
   }
 
   async analyzeStorePerformance(storeId: number) {
+    if (!storeId) {
+      throw new BadRequestException('StoreId es requerido');
+    }
     const sales = await this.posSaleRepo
       .createQueryBuilder('s')
       .select([
@@ -171,76 +175,161 @@ export class GeminiIaService {
     });
 
     const prompt = `
-Eres un analista de datos y marketing experto en ventas retail.
+Eres un analista experto en retail.
 
-Datos de la tienda ID ${storeId}:
-- Ventas por producto: ${JSON.stringify(sales)}
-- Promedio global por producto: ${JSON.stringify(global)}
-- Niveles de stock actuales: ${JSON.stringify(
-      stock.map((s) => ({
-        name: s.productName,
-        quantity: s.quantity,
-        cost: s.cost,
-      })),
-    )}
+Analiza estos datos de la tienda ID ${storeId}:
 
-Tareas:
+VENTAS POR PRODUCTO:
+${JSON.stringify(sales)}
+
+PROMEDIO GLOBAL:
+${JSON.stringify(global)}
+
+STOCK ACTUAL:
+${JSON.stringify(
+  stock.map((s) => ({
+    name: s.productName,
+    quantity: s.quantity,
+    cost: s.cost,
+  })),
+)}
+
+TAREAS:
 1. Identifica los 5 productos más vendidos y explica 2 razones posibles de su éxito.
 2. Identifica los 5 productos menos vendidos y sugiere 2 acciones para mejorar sus ventas.
-3. Compara los resultados con el promedio global.
-4. Devuelve la respuesta en formato JSON con esta estructura:
+3. Compara con el promedio global e identifica brechas importantes.
+4. Devuelve la respuesta en formato JSON estricto:
 {
- "top_products": [...],
- "low_products": [...],
- "executive_summary": [...]
+  "top_products": [...],
+  "low_products": [...],
+  "executive_summary": [...]
 }
 `;
 
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = result.response.text().trim();
 
-    this.logger.log('AI Analysis generated successfully');
-    return { data: sales, ai: text };
+    return {
+      data: {
+        sales,
+        global,
+        stock,
+      },
+      ai: text,
+    };
   }
 
-  private async extractMaterialsFromPrompt(prompt: string): Promise<string[]> {
+  private async getUserMode(location?: UserLocationDto) {
+    if (!location?.lat || !location?.lng) {
+      return { mode: 'general', distance: null };
+    }
+
+    return this.modesService.detectMode(location);
+  }
+
+  private async resolveStoresForMaterials(
+    materials: string[],
+    location?: UserLocationDto,
+  ) {
+    if (!location?.lat || !location?.lng) {
+      return this.searchMaterialsInAllStores(materials);
+    }
+
+    const nearby = await this.storesService.getNearestStores(
+      location.lat,
+      location.lng,
+      DISTANCE_NEARBY_STORES,
+    );
+
+    const nearest = nearby[0];
+    if (!nearest) return [];
+
+    const isInsideStore = nearest.distance_meters <= DISTANCE_STORE_MODE;
+
+    if (isInsideStore) {
+      const store = await this.storeRepo.findOne({
+        where: { id: nearest.id },
+        relations: ['products'],
+      });
+
+      if (!store) return [];
+
+      return this.filterProductsInStore(materials, store);
+    }
+
+    const stores = await this.storeRepo.find({ relations: ['products'] });
+
+    return stores
+      .map((store) => {
+        const match = nearby.find((s) => s.id === store.id);
+        if (!match) return null;
+
+        const found = this.filterProductsInStore(materials, store);
+        if (!found.length) return null;
+
+        return {
+          ...store,
+          distance_meters: match.distance_meters,
+          products: found,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a!.distance_meters - b!.distance_meters);
+  }
+
+  private async searchMaterialsInAllStores(materials: string[]) {
+    const stores = await this.storeRepo.find({ relations: ['products'] });
+
+    return stores
+      .map((store) => {
+        const found = this.filterProductsInStore(materials, store);
+        if (!found.length) return null;
+
+        return { ...store, products: found };
+      })
+      .filter(Boolean);
+  }
+
+  private async extractMaterialsFromPrompt(prompt: string) {
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
     const result = await model.generateContent(`
-      Analiza este texto: "${prompt}".
-      Devuelve solo un JSON con una lista de los materiales o productos necesarios.
-      Ejemplo: ["madera MDF", "tornillos", "pegamento", "bisagras"]
-    `);
+    Extrae SOLO el nombre del producto principal del siguiente texto:
+    "${prompt}"
 
-    return this.parseAIResponse(result.response.text());
+    Devuelve obligatoriamente un JSON array válido.
+    Ejemplo: ["audifonos bluetooth jbl"]
+  `);
+
+    const raw = result.response.text();
+    return this.parseList(raw);
   }
 
-  private async extractMaterialsFromImage(
-    imageBase64: string,
-    mimeType: string,
-  ): Promise<string[]> {
+  private async extractMaterialsFromImage(base64: string, mime: string) {
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
+
     const result = await model.generateContent([
       {
         text: `
-          Observa la imagen adjunta y responde **solo** con un JSON válido (sin texto adicional).
-          Devuelve un array con los materiales/productos detectados o {"success": false, "message":"No se pudieron identificar materiales o productos en la imagen."}.
-          Usa español.
+          Analiza la imagen y devuelve SOLO un JSON array con productos detectados.
         `,
       },
-      { inlineData: { mimeType, data: imageBase64 } },
+      {
+        inlineData: { mimeType: mime, data: base64 },
+      },
     ]);
 
-    return this.parseAIResponse(result.response.text());
+    return this.parseList(result.response.text());
   }
 
-  private parseAIResponse(text: string): string[] {
+  private parseList(text: string): string[] {
     const cleaned = text.replace(/```json|```/g, '').trim();
+
     try {
       const parsed = JSON.parse(cleaned);
       return Array.isArray(parsed) ? parsed : [];
     } catch {
-      return cleaned.split(',').map((m) => m.trim());
+      return cleaned.split(',').map((s) => s.trim());
     }
   }
 
@@ -253,105 +342,26 @@ Tareas:
     return response;
   }
 
-  private normalizeText(text: string): string {
+  private normalize(text: string) {
     return text
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/s\b/g, '')
       .trim();
   }
 
-  private calcDistance(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number,
-  ): number {
-    const R = 6371e3;
-    const toRad = (x: number) => (x * Math.PI) / 180;
-    const φ1 = toRad(lat1);
-    const φ2 = toRad(lat2);
-    const Δφ = toRad(lat2 - lat1);
-    const Δλ = toRad(lng2 - lng1);
-    const a =
-      Math.sin(Δφ / 2) ** 2 +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
-  private async getStoresForMaterials(
-    materials: string[],
-    location?: UserLocationDto,
-    currentStore?: Store,
-  ) {
-    const stores = await this.storeRepo.find({ relations: ['products'] });
-
-    let mode: 'store' | 'general' = 'general';
-    let nearestStore: Store | undefined = currentStore;
-
-    if (location?.lat && location?.lng) {
-      if (!nearestStore) {
-        nearestStore = stores
-          .map((s) => ({
-            store: s,
-            distance: this.calcDistance(
-              location.lat,
-              location.lng,
-              Number(s.latitude),
-              Number(s.longitude),
-            ),
-          }))
-          .sort((a, b) => a.distance - b.distance)[0]?.store;
-      }
-
-      const distanceToNearest = nearestStore
-        ? this.calcDistance(
-            location.lat,
-            location.lng,
-            Number(nearestStore.latitude),
-            Number(nearestStore.longitude),
-          )
-        : Infinity;
-
-      if (distanceToNearest <= this.storeRadius) mode = 'store';
-    }
-
-    if (mode === 'store' && nearestStore) {
-      return this.filterProductsInStore(materials, nearestStore);
-    }
-
-    const generalMax = this.generalRadius;
-    return stores
-      .map((store) => {
-        const distance = location
-          ? this.calcDistance(
-              location.lat,
-              location.lng,
-              Number(store.latitude),
-              Number(store.longitude),
-            )
-          : null;
-        if (distance !== null && distance > generalMax) return null;
-
-        const filtered = this.filterProductsInStore(materials, store);
-        if (!filtered.length) return null;
-
-        return { ...store, distance, products: filtered };
-      })
-      .filter((s) => s !== null);
-  }
-
   private filterProductsInStore(materials: string[], store: Store) {
-    const matchingProducts = store.products
-      .filter((p) =>
-        materials.some((m) =>
-          this.normalizeText(p.name).includes(this.normalizeText(m)),
-        ),
-      )
-      .map((p) => ({ name: p.name, price: p.price, stock: p.stock }));
-    if (!matchingProducts.length) return [];
-    return matchingProducts;
+    const normalizedMaterials = materials.map((m) => this.normalize(m));
+
+    const found = store.products.filter((p) => {
+      const name = this.normalize(p.name);
+      return normalizedMaterials.some((m) => name.includes(m));
+    });
+
+    return found.map((p) => ({
+      name: p.name,
+      price: p.price,
+      stock: p.stock,
+    }));
   }
 }

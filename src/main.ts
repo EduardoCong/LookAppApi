@@ -11,20 +11,17 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // --- CONFIGURACIÓN DE CORS PARA ACEPTAR TODO ---
-  // Esto permite peticiones desde CUALQUIER origen (*).
-  // Es ideal para pruebas, pero menos seguro para producción.
   app.enableCors({
     origin: '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Accept, Authorization',
   });
-  // ----------------------------------------------
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: false,
     transform: true,
+    transformOptions: { enableImplicitConversion: true }
   }));
 
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {

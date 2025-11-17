@@ -16,7 +16,8 @@ export class AuthService {
     ) { }
 
     async validateUser(email: string, password: string) {
-        const user = await this.usersService.findByEmail(email);
+        const normalizedEmail = email.toLowerCase().trim();
+        const user = await this.usersService.findByEmail(normalizedEmail);
         if (!user) throw new UnauthorizedException('Usuario no encontrado');
 
         const validPassword = await bcrypt.compare(password, user.password);

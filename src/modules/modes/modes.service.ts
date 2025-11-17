@@ -1,61 +1,76 @@
-import { Injectable, Inject, Optional } from '@nestjs/common';
-
+import { Injectable } from '@nestjs/common';
 import { StoresService } from '../stores/stores.service';
+import {
+  DISTANCE_NEARBY_STORES,
+  DISTANCE_STORE_MODE,
+} from 'src/config/constats';
 import { UserLocationDto } from './dto/user.location';
-import { ModeResult } from './interfaces/modes-result.interface';
-import { getDistanceFromLatLonInKm } from './utils/distance';
+import { Repository } from 'typeorm';
+import { Store } from '../stores/entities/store.entity';
+import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class ModesService {
-  private readonly defaultMaxDistance = 300;
-  private readonly storeRadius = 0.006;
+  private readonly storeRadius = DISTANCE_STORE_MODE;
+  private readonly searchRadius = DISTANCE_NEARBY_STORES;
 
   constructor(
-    @Optional()
-    @Inject(StoresService)
-    private readonly storesService?: StoresService,
+    private readonly storesService: StoresService,
+
+    @InjectRepository(Store)
+    private readonly storeRepo: Repository<Store>,
   ) {}
 
-  async detectMode(
-  location: UserLocationDto,
-  maxDistance?: number,
-): Promise<ModeResult> {
-  const m = maxDistance ?? this.defaultMaxDistance;
+  async detectMode(location: UserLocationDto) {
+    const storesNearby = await this.storesService.getNearestStores(
+      location.lat,
+      location.lng,
+      this.searchRadius,
+    );
 
-  if (this.storesService) {
-    try {
-      const nearest = await this.storesService.getNearestStore(
-        location.lat,
-        location.lng,
-        m,
-      );
-
-      if (nearest) {
-        const distance = this.calcDistanceTo(
-          location.lat,
-          location.lng,
-          nearest.lat,
-          nearest.lng,
-        );
-
-        if (distance <= this.storeRadius) {
-          return { mode: 'store', meta: { store: nearest, distance } };
-        }
-      }
-    } catch (err) {
-      console.error('Error detectando tienda:', err);
+    const nearest = storesNearby[0];
+    if (!nearest) {
+      const allStores = await this.storesService.findActive();
+      return {
+        mode: 'general',
+        distance: null,
+        stores: allStores,
+      };
     }
-  }
 
-  return { mode: 'general' };
-}
+    const distance = nearest.distance_meters;
+    const store = await this.storesService.findActiveById(nearest.id);
 
-  calcDistanceTo(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-  ): number {
-    return getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2);
+    if (distance <= this.storeRadius) {
+      const fullStore = await this.storesService.findActiveById(nearest.id);
+
+      return {
+        mode: 'store',
+        store_id: nearest.id,
+        store: {
+          id: fullStore.id,
+          business_name: fullStore.business_name,
+          owner_name: fullStore.owner_name,
+          address: fullStore.address,
+          latitude: fullStore.latitude,
+          longitude: fullStore.longitude,
+          category: fullStore.category,
+          detail: fullStore.detail,
+          products: fullStore.products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            stock: p.stock,
+            imageUrl: p.imageUrl,
+          })),
+        },
+      };
+    }
+
+    const allStores = await this.storesService.findActive();
+    return {
+      mode: 'general',
+      stores: allStores,
+    };
   }
 }

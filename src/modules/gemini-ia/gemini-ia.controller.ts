@@ -31,15 +31,15 @@ export class GeminiIaController {
 
   @Post('text')
   async analyzeText(@Req() req: Request, @Body() dto: AnalizeTextDto) {
-    const { prompt, lat, lng } = dto;
+    const { prompt, location } = dto;
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader)
+    const auth = req.headers.authorization;
+    if (!auth) {
       throw new BadRequestException('Missing Authorization header');
-    const token = authHeader.replace('Bearer ', '').trim();
-    const decoded: any = jwt.verify(token, this.jwtSecret);
+    }
 
-    const location = lat && lng ? { lat, lng } : undefined;
+    const token = auth.replace('Bearer ', '').trim();
+    const decoded: any = jwt.verify(token, this.jwtSecret);
 
     const result = await this.aiService.analyzeText(prompt, location);
     return { success: true, result };

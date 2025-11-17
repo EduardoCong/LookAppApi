@@ -1,0 +1,2 @@
+export const DISTANCE_STORE_MODE = 6;
+export const DISTANCE_NEARBY_STORES = 30000;
