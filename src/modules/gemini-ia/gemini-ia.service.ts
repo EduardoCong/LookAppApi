@@ -10,6 +10,7 @@ import { PosStock } from '../stores/entities/pos_stock.entity';
 import { PosSale } from '../web/admin-store/pos/entities/pos-sale.entity';
 import { AiSearchInput } from '../app/History/entities/ai_search_input.entity';
 import { AiSearchOutput } from '../app/History/entities/ai_search_output.entity';
+
 import { SupabaseService } from 'src/supabase.service';
 import { UserLocationDto } from '../modes/dto/user.location';
 import { StoresService } from '../stores/stores.service';
@@ -23,22 +24,28 @@ import { ModesService } from '../modes/modes.service';
 export class GeminiIaService {
   private readonly logger = new Logger(GeminiIaService.name);
   private genIA: GoogleGenerativeAI;
-  //private modelIA = 'gemini-2.5-pro';
-  private modelIA = "gemini-2.0-flash";
+  private modelIA = 'gemini-2.0-flash';
 
   constructor(
     private readonly configService: ConfigService,
     private readonly storesService: StoresService,
     private readonly modesService: ModesService,
-    @InjectRepository(Store) private readonly storeRepo: Repository<Store>,
+
+    @InjectRepository(Store)
+    private readonly storeRepo: Repository<Store>,
+
     @InjectRepository(PosSale)
     private readonly posSaleRepo: Repository<PosSale>,
+
     @InjectRepository(PosStock)
     private readonly posStockRepo: Repository<PosStock>,
+
     @InjectRepository(AiSearchInput)
     private readonly inputRepo: Repository<AiSearchInput>,
+
     @InjectRepository(AiSearchOutput)
     private readonly outputRepo: Repository<AiSearchOutput>,
+
     private readonly supabaseService: SupabaseService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
@@ -55,10 +62,7 @@ export class GeminiIaService {
       if (!materials.length) {
         return this.saveAndReturn(
           input,
-          {
-            success: false,
-            message: 'No se identificaron materiales.',
-          },
+          { success: false, message: 'No se identificaron materiales.' },
           false,
         );
       }
@@ -113,17 +117,22 @@ export class GeminiIaService {
       }
 
       const stores = await this.resolveStoresForMaterials(materials, location);
+      const modeInfo = await this.getUserMode(location);
 
       return this.saveAndReturn(
         input,
-        stores.length
-          ? { success: true, materials, available: true, stores }
-          : {
-              success: true,
-              materials,
-              available: false,
-              message: `No hay tiendas con ${materials.join(', ')}`,
-            },
+        {
+          mode: modeInfo.mode,
+          distance: modeInfo.distance,
+          success: true,
+          materials,
+          available: stores.length > 0,
+          stores: stores.length > 0 ? stores : [],
+          message:
+            stores.length === 0
+              ? `No hay tiendas con ${materials.join(', ')}`
+              : undefined,
+        },
         true,
       );
     } catch (error) {
@@ -137,6 +146,7 @@ export class GeminiIaService {
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
       const mime = url.endsWith('png') ? 'image/png' : 'image/jpeg';
+
       return this.analyzeImage(buffer, mime, location);
     } catch (error) {
       this.logger.error('Error leyendo imagen desde URL', error);
@@ -145,9 +155,8 @@ export class GeminiIaService {
   }
 
   async analyzeStorePerformance(storeId: number) {
-    if (!storeId) {
-      throw new BadRequestException('StoreId es requerido');
-    }
+    if (!storeId) throw new BadRequestException('StoreId es requerido');
+
     const sales = await this.posSaleRepo
       .createQueryBuilder('s')
       .select([
@@ -176,48 +185,23 @@ export class GeminiIaService {
 
     const prompt = `
 Eres un analista experto en retail.
-
 Analiza estos datos de la tienda ID ${storeId}:
 
-VENTAS POR PRODUCTO:
-${JSON.stringify(sales)}
+VENTAS: ${JSON.stringify(sales)}
+PROMEDIO GLOBAL: ${JSON.stringify(global)}
+STOCK ACTUAL: ${JSON.stringify(stock)}
 
-PROMEDIO GLOBAL:
-${JSON.stringify(global)}
-
-STOCK ACTUAL:
-${JSON.stringify(
-  stock.map((s) => ({
-    name: s.productName,
-    quantity: s.quantity,
-    cost: s.cost,
-  })),
-)}
-
-TAREAS:
-1. Identifica los 5 productos más vendidos y explica 2 razones posibles de su éxito.
-2. Identifica los 5 productos menos vendidos y sugiere 2 acciones para mejorar sus ventas.
-3. Compara con el promedio global e identifica brechas importantes.
-4. Devuelve la respuesta en formato JSON estricto:
-{
-  "top_products": [...],
-  "low_products": [...],
-  "executive_summary": [...]
-}
+Devuelve JSON estricto con:
+- top_products
+- low_products
+- executive_summary
 `;
 
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 
-    return {
-      data: {
-        sales,
-        global,
-        stock,
-      },
-      ai: text,
-    };
+    return { data: { sales, global, stock }, ai: text };
   }
 
   private async getUserMode(location?: UserLocationDto) {
@@ -254,7 +238,6 @@ TAREAS:
       });
 
       if (!store) return [];
-
       return this.filterProductsInStore(materials, store);
     }
 
@@ -285,7 +268,6 @@ TAREAS:
       .map((store) => {
         const found = this.filterProductsInStore(materials, store);
         if (!found.length) return null;
-
         return { ...store, products: found };
       })
       .filter(Boolean);
@@ -293,30 +275,24 @@ TAREAS:
 
   private async extractMaterialsFromPrompt(prompt: string) {
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
+
     const result = await model.generateContent(`
     Extrae SOLO el nombre del producto principal del siguiente texto:
     "${prompt}"
 
-    Devuelve obligatoriamente un JSON array válido.
-    Ejemplo: ["audifonos bluetooth jbl"]
+    Devuelve JSON ARRAY válido:
+    ["audifonos bluetooth jbl"]
   `);
 
-    const raw = result.response.text();
-    return this.parseList(raw);
+    return this.parseList(result.response.text());
   }
 
   private async extractMaterialsFromImage(base64: string, mime: string) {
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
 
     const result = await model.generateContent([
-      {
-        text: `
-          Analiza la imagen y devuelve SOLO un JSON array con productos detectados.
-        `,
-      },
-      {
-        inlineData: { mimeType: mime, data: base64 },
-      },
+      { text: `Devuelve JSON array con productos detectados.` },
+      { inlineData: { mimeType: mime, data: base64 } },
     ]);
 
     return this.parseList(result.response.text());
