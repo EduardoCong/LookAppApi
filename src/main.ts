@@ -1,6 +1,3 @@
-// FileName: main.ts
-// Path: main.ts
-
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -8,11 +5,20 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
-import * as bodyParser from 'body-parser';
+// Stripe necesita raw body
+import { json, raw } from 'body-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  app.use('/stripe/webhook', bodyParser.raw({ type: '*/*' }));
+  // Desactivamos bodyParser global
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+
+  // 1. RAW BODY SOLO para Stripe Webhook
+  app.use('/stripe/webhook', raw({ type: '*/*' }));
+
+  // 2. JSON BODY NORMAL para todo lo demás
+  app.use(json({ limit: '100mb' }));
 
   app.enableCors({
     origin: '*',
@@ -39,6 +45,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
+
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
@@ -48,4 +55,5 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
 }
+
 bootstrap();
