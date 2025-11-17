@@ -6,11 +6,12 @@ import { Public } from 'src/common/decorators/public.decorator';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminStoresService } from 'src/modules/web-admin/stores/admin-stores.service';
 import { StoresService } from 'src/modules/stores/stores.service';
+import { WebStoresPaymentsService } from './web-stores-payments.service';
 
 @ApiTags('WEB / SuperAdmin')
 @Controller('web/superadmin')
 export class WebStoresController {
-    constructor(private readonly service: WebStoresService, private readonly adminstoreservice: AdminStoresService, private readonly storeservice: StoresService) { }
+    constructor(private readonly service: WebStoresService, private readonly adminstoreservice: AdminStoresService, private readonly storeservice: StoresService, private readonly paymentsService: WebStoresPaymentsService) { }
 
 
     @Get('admin/stats')
@@ -126,5 +127,12 @@ export class WebStoresController {
     @Get('store/:id/stats')
     async getStoreStats(@Param('id') id: number) {
         return this.service.getStoreStats(id);
+    }
+
+    @Get(':storeId/historial-payments')
+    async getPaymentsByStore(
+        @Param('storeId', ParseIntPipe) storeId: number
+    ) {
+        return this.paymentsService.getPaymentsByStore(storeId);
     }
 }

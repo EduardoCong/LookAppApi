@@ -13,6 +13,7 @@ import { PosStock } from '../../admin-store/pos/entities/pos-stock.entity';
 import { faker } from '@faker-js/faker';
 import { PurchaseFull } from 'src/modules/app/Purchases/entities/purchase-full.entity';
 import { PurchaseApartado } from 'src/modules/app/Purchases/entities/purchase-apartado.entity';
+import { StoreSubscriptionPayment } from 'src/modules/stores/entities/store-subscription-payment.entity';
 
 @Injectable()
 export class WebStoresService {
@@ -34,6 +35,9 @@ export class WebStoresService {
         @InjectRepository(PosStock)
         private readonly stockRepo: Repository<PosStock>,
 
+        @InjectRepository(StoreSubscriptionPayment)
+        private readonly paymentRepo: Repository<StoreSubscriptionPayment>,
+
         private readonly configService: ConfigService,
     ) {
         this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY')!, {
@@ -42,7 +46,6 @@ export class WebStoresService {
     }
     async registerWithStripe(body: any) {
         const {
-            // Datos de usuario (se aceptan ambas variantes)
             name,
             user_name,
             email,
@@ -51,8 +54,6 @@ export class WebStoresService {
             phone,
             username,
             role,
-
-            // Datos de tienda
             business_name,
             owner_name,
             address,
@@ -62,8 +63,6 @@ export class WebStoresService {
             description,
             category_id,
             status,
-
-            // Stripe
             plan_id,
             payment_method_id,
         } = body;
@@ -83,10 +82,7 @@ export class WebStoresService {
                 !plan_id ||
                 !payment_method_id
             ) {
-                throw new HttpException(
-                    'Faltan campos obligatorios.',
-                    HttpStatus.BAD_REQUEST,
-                );
+                throw new HttpException('Faltan campos obligatorios.', HttpStatus.BAD_REQUEST);
             }
 
             const existingUser = await this.userRepo.findOne({ where: { email: finalEmail } });
@@ -97,8 +93,37 @@ export class WebStoresService {
                 );
             }
 
+            // 1. Crear usuario
             const hashedPassword = await bcrypt.hash(password, 10);
+            const savedUser = await this.userRepo.save(
+                this.userRepo.create({
+                    name: finalName,
+                    email: finalEmail,
+                    password: hashedPassword,
+                    phone,
+                    username,
+                    role: role || UserRole.STORE,
+                }),
+            );
 
+            // 2. Crear tienda
+            const savedStore = await this.storeRepo.save(
+                this.storeRepo.create({
+                    business_name,
+                    owner_name,
+                    address,
+                    map_url,
+                    longitude,
+                    latitude,
+                    description,
+                    category: { id: category_id },
+                    user: savedUser,
+                    status: (status as StoreStatus) || StoreStatus.PENDING,
+                    is_verified: false,
+                }),
+            );
+
+            // 3. Crear customer en Stripe
             const customer = await this.stripe.customers.create({
                 name: finalName,
                 email: finalEmail,
@@ -106,80 +131,64 @@ export class WebStoresService {
                 invoice_settings: { default_payment_method: payment_method_id },
             });
 
-
+            // 4. Crear suscripción
             const subscription = await this.stripe.subscriptions.create({
                 customer: customer.id,
                 items: [{ price: this.getPriceId(plan_id) }],
                 expand: ['latest_invoice'],
+                metadata: {
+                    storeId: savedStore.id.toString(),
+                    userId: savedUser.id.toString(),
+                    planId: plan_id,
+                    businessName: business_name,
+                },
             });
 
             const invoice: any = subscription.latest_invoice;
-            const invoiceStatus = invoice?.status ?? 'unknown';
-            const subscriptionStatus = subscription.status ?? 'unknown';
-            const invoicePdfUrl: string | null = invoice?.invoice_pdf ?? null;
 
+            if (!invoice) {
+                throw new HttpException(
+                    'No se pudo obtener la factura inicial de Stripe',
+                    HttpStatus.BAD_REQUEST,
+                );
+            }
 
-            if (invoiceStatus !== 'paid' && subscriptionStatus !== 'active') {
+            const invoiceStatus = invoice.status;
+            const subscriptionStatus = subscription.status;
+
+            if (invoiceStatus !== 'paid' || subscriptionStatus !== 'active') {
                 throw new HttpException(
                     `El pago no fue exitoso (factura: ${invoiceStatus}, suscripción: ${subscriptionStatus}).`,
                     HttpStatus.BAD_REQUEST,
                 );
             }
 
-            const newUser = this.userRepo.create({
-                name: finalName,
-                email: finalEmail,
-                password: hashedPassword,
-                phone,
-                username,
-                role: role || UserRole.STORE,
-            });
-            const savedUser = await this.userRepo.save(newUser);
-
-            const newStore = this.storeRepo.create({
-                business_name,
-                owner_name,
-                address,
-                map_url,
-                longitude,
-                latitude,
-                description,
-                category: { id: category_id },
-                user: savedUser,
-                status: (status as StoreStatus) || StoreStatus.PENDING,
-                is_verified: false,
+            // 5. Guardar el primer pago en TU BD
+            await this.paymentRepo.save({
+                store_id: savedStore.id,
+                amount: invoice.amount_paid / 100,
+                currency: invoice.currency.toUpperCase(),
+                stripe_charge_id: invoice.charge,
+                stripe_payment_intent_id: invoice.payment_intent,
+                status: 'paid',
+                paid_at: new Date(invoice.status_transitions.paid_at * 1000),
             });
 
-            const savedStore = await this.storeRepo.save(newStore);
-            savedUser.store = savedStore;
-            await this.userRepo.save(savedUser);
-
-            const subData = subscription as any;
-
-            const current_period_start =
-                subData.latest_invoice?.period_start
-                    ? new Date(subData.latest_invoice.period_start * 1000)
-                    : subData.start_date
-                        ? new Date(subData.start_date * 1000)
-                        : null;
-
-            const current_period_end =
-                subData.latest_invoice?.period_end
-                    ? new Date(subData.latest_invoice.period_end * 1000)
-                    : null;
-
+            // 6. Guardar suscripción
             const subscriptionRecord = this.subRepo.create({
                 ...({ store: { id: savedStore.id } } as any),
                 stripe_customer_id: customer.id,
-                stripe_subscription_id: subData.id,
+                stripe_subscription_id: subscription.id,
                 price_id: this.getPriceId(plan_id),
                 plan_key: plan_id,
-                status: subData.status,
-                current_period_start,
-                current_period_end,
+                status: subscription.status,
+                current_period_start: new Date(invoice.period_start * 1000),
+                current_period_end: new Date(invoice.period_end * 1000),
             });
 
             await this.subRepo.save(subscriptionRecord);
+
+            // POS data
             await this.initializePosForStore(savedStore.id);
 
             return {
@@ -189,20 +198,18 @@ export class WebStoresService {
                     stripe: {
                         customer_id: customer.id,
                         subscription_id: subscription.id,
-                        invoice_status: invoiceStatus,
-                        subscription_status: subscriptionStatus,
-                        invoice_pdf: invoicePdfUrl,
+                        invoice_pdf: invoice.invoice_pdf ?? null,
                     },
                 },
             };
+
         } catch (error: any) {
             console.error('Error Stripe:', error);
-            throw new HttpException(
-                error.message || 'Error al procesar el pago con Stripe.',
-                HttpStatus.BAD_REQUEST,
-            );
+            throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
         }
     }
+
+
 
     async getAdminStats() {
         try {

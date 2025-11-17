@@ -15,10 +15,12 @@ import { StoresService } from 'src/modules/stores/stores.service';
 import { Category } from 'src/modules/categories/entities/category.entity';
 import { PurchaseFull } from 'src/modules/app/Purchases/entities/purchase-full.entity';
 import { PurchaseApartado } from 'src/modules/app/Purchases/entities/purchase-apartado.entity';
+import { StoreSubscriptionPayment } from 'src/modules/stores/entities/store-subscription-payment.entity';
+import { WebStoresPaymentsService } from './web-stores-payments.service';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Store, StoreDetail, User, StoreSubscription, PosSale, PosStock, StoreReviewLog, Category, PurchaseFull, PurchaseApartado]), ConfigModule],
+    imports: [TypeOrmModule.forFeature([Store, StoreDetail, User, StoreSubscription, PosSale, PosStock, StoreReviewLog, Category, PurchaseFull, PurchaseApartado, StoreSubscriptionPayment]), ConfigModule],
     controllers: [WebStoresController],
-    providers: [WebStoresService, AdminStoresService, StoresService],
+    providers: [WebStoresService, AdminStoresService, StoresService, WebStoresPaymentsService],
 })
 export class WebStoresModule { }
