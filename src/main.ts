@@ -8,8 +8,11 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
+import * as bodyParser from 'body-parser';
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.use('/stripe/webhook', bodyParser.raw({ type: '*/*' }));
 
   app.enableCors({
     origin: '*',

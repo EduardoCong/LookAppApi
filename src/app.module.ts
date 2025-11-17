@@ -17,6 +17,7 @@ import { StoreStatsModule } from './modules/web/admin-store/dashboard/stats.modu
 import { DatabaseService } from './database/database.service';
 import { AppMobileModule } from './modules/app/app.module';
 import { ModesModule } from './modules/modes/modes.module';
+import { StripeWebhookModule } from './modules/web/stripe/stripe-webhook.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ModesModule } from './modules/modes/modes.module';
     // AdminStoresModule,
     GeminiIaModule,
     ModesModule,
+    StripeWebhookModule
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
