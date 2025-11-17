@@ -303,10 +303,36 @@ Devuelve JSON estricto con:
 
     try {
       const parsed = JSON.parse(cleaned);
-      return Array.isArray(parsed) ? parsed : [];
+
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => {
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object' && item !== null) {
+              return item.label || item.name || item.product || null;
+            }
+            return null;
+          })
+          .filter((v) => typeof v === 'string');
+      }
+
+      if (typeof parsed === 'object' && parsed !== null) {
+        for (const key of Object.keys(parsed)) {
+          const val = parsed[key];
+          if (Array.isArray(val)) {
+            return val.filter((x) => typeof x === 'string');
+          }
+        }
+      }
+
+      if (typeof parsed === 'string') {
+        return parsed.split(',').map((s) => s.trim());
+      }
     } catch {
       return cleaned.split(',').map((s) => s.trim());
     }
+
+    return [];
   }
 
   private async saveAndReturn(
@@ -318,7 +344,8 @@ Devuelve JSON estricto con:
     return response;
   }
 
-  private normalize(text: string) {
+  private normalize(text: any) {
+    if (typeof text !== 'string') return '';
     return text
       .toLowerCase()
       .normalize('NFD')
@@ -327,7 +354,11 @@ Devuelve JSON estricto con:
   }
 
   private filterProductsInStore(materials: string[], store: Store) {
-    const normalizedMaterials = materials.map((m) => this.normalize(m));
+    const normalizedMaterials = materials
+      .map((m) => this.normalize(m))
+      .filter((m) => m.length > 0);
+
+    if (normalizedMaterials.length === 0) return [];
 
     const found = store.products.filter((p) => {
       const name = this.normalize(p.name);

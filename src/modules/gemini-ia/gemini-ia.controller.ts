@@ -55,17 +55,21 @@ export class GeminiIaController {
     const authHeader = req.headers.authorization;
     if (!authHeader)
       throw new BadRequestException('Missing Authorization header');
+
     const token = authHeader.replace('Bearer ', '').trim();
     const decoded: any = jwt.verify(token, this.jwtSecret);
 
     const location =
-      body.lat && body.lng ? { lat: body.lat, lng: body.lng } : undefined;
+      body.lat && body.lng
+        ? { lat: Number(body.lat), lng: Number(body.lng) }
+        : undefined;
 
     const result = await this.aiService.analyzeImage(
       file.buffer,
       file.mimetype,
       location,
     );
+
     return { source: file.originalname, ...result };
   }
 
@@ -91,9 +95,9 @@ export class GeminiIaController {
   async analyzeImage(
     @Req() req: Request,
     @UploadedFile() file: Express.Multer.File,
-    @Body('imageUrl') imageUrl: string,
+    @Body() body: { imageUrl?: string; lat?: number; lng?: number },
   ) {
-    if (!file && !imageUrl) {
+    if (!file && !body.imageUrl) {
       throw new BadRequestException(
         'Debes enviar un archivo o una URL de imagen',
       );
@@ -105,11 +109,9 @@ export class GeminiIaController {
 
     const token = authHeader.replace('Bearer ', '').trim();
     const decoded: any = jwt.verify(token, this.jwtSecret);
-    if (!decoded?.sub) {
-      throw new BadRequestException(
-        'Invalid or malformed token: missing user ID',
-      );
-    }
+
+    const location =
+      body.lat && body.lng ? { lat: body.lat, lng: body.lng } : undefined;
 
     const user = { id: decoded.sub } as any;
 
@@ -121,11 +123,14 @@ export class GeminiIaController {
       result = await this.aiService.analyzeImage(
         file.buffer,
         file.mimetype,
-        user,
+        location,
       );
     } else {
-      source = imageUrl;
-      result = await this.aiService.analyzeImageFromUrl(imageUrl, user);
+      source = body.imageUrl ?? '';
+      result = await this.aiService.analyzeImageFromUrl(
+        body.imageUrl ?? '',
+        location,
+      );
     }
 
     return { source, ...result };
