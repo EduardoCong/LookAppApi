@@ -20,6 +20,7 @@ import * as jwt from 'jsonwebtoken';
 @Controller('analyze')
 export class GeminiIaController {
   private readonly jwtSecret: string;
+
   constructor(
     private readonly aiService: GeminiIaService,
     private readonly configService: ConfigService,
@@ -29,19 +30,35 @@ export class GeminiIaController {
     this.jwtSecret = secret;
   }
 
-  @Post('text')
-  async analyzeText(@Req() req: Request, @Body() dto: AnalizeTextDto) {
-    const { prompt, location } = dto;
-
+  private getUserFromToken(req: Request) {
     const auth = req.headers.authorization;
-    if (!auth) {
-      throw new BadRequestException('Missing Authorization header');
-    }
+    if (!auth) throw new BadRequestException('Missing Authorization header');
 
     const token = auth.replace('Bearer ', '').trim();
     const decoded: any = jwt.verify(token, this.jwtSecret);
+    if (!decoded?.sub) {
+      throw new BadRequestException('Invalid token: missing user ID');
+    }
 
-    const result = await this.aiService.analyzeText(prompt, location);
+    return { id: decoded.sub };
+  }
+
+  private extractLocation(body: any) {
+    if (!body?.lat || !body?.lng) return undefined;
+    return { lat: Number(body.lat), lng: Number(body.lng) };
+  }
+
+  @Post('text')
+  async analyzeText(@Req() req: Request, @Body() dto: AnalizeTextDto) {
+    const user = this.getUserFromToken(req);
+    const { prompt, location } = dto;
+
+    const result = await this.aiService.analyzeText(
+      prompt,
+      user,
+      location,
+    );
+
     return { success: true, result };
   }
 
@@ -50,23 +67,17 @@ export class GeminiIaController {
   async analyzePhoto(
     @Req() req: Request,
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { lat?: number; lng?: number },
+    @Body() body: any,
   ) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader)
-      throw new BadRequestException('Missing Authorization header');
+    const user = this.getUserFromToken(req);
+    const location = this.extractLocation(body);
 
-    const token = authHeader.replace('Bearer ', '').trim();
-    const decoded: any = jwt.verify(token, this.jwtSecret);
-
-    const location =
-      body.lat && body.lng
-        ? { lat: Number(body.lat), lng: Number(body.lng) }
-        : undefined;
+    if (!file) throw new BadRequestException('La foto es obligatoria');
 
     const result = await this.aiService.analyzeImage(
       file.buffer,
       file.mimetype,
+      user,
       location,
     );
 
@@ -76,64 +87,50 @@ export class GeminiIaController {
   @Post('imagen')
   @UseInterceptors(
     FileInterceptor('file', {
-      fileFilter: (req, file, callback) => {
+      storage: memoryStorage(),
+      fileFilter: (req, file, cb) => {
         const allowedTypes = [
           'image/jpeg',
           'image/jpg',
           'image/png',
           'image/webp',
         ];
-        if (allowedTypes.includes(file.mimetype)) callback(null, true);
-        else
-          callback(
-            new BadRequestException('Tipo de archivo no permitido.'),
-            false,
-          );
+        if (allowedTypes.includes(file.mimetype)) cb(null, true);
+        else cb(new BadRequestException('Tipo de archivo no permitido'), false);
       },
     }),
   )
   async analyzeImage(
     @Req() req: Request,
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { imageUrl?: string; lat?: number; lng?: number },
+    @Body() body: any,
   ) {
+    const user = this.getUserFromToken(req);
+    const location = this.extractLocation(body);
+
     if (!file && !body.imageUrl) {
       throw new BadRequestException(
         'Debes enviar un archivo o una URL de imagen',
       );
     }
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader)
-      throw new BadRequestException('Missing Authorization header');
-
-    const token = authHeader.replace('Bearer ', '').trim();
-    const decoded: any = jwt.verify(token, this.jwtSecret);
-
-    const location =
-      body.lat && body.lng ? { lat: body.lat, lng: body.lng } : undefined;
-
-    const user = { id: decoded.sub } as any;
-
-    let source: string;
-    let result: any;
-
     if (file) {
-      source = file.originalname;
-      result = await this.aiService.analyzeImage(
+      const result = await this.aiService.analyzeImage(
         file.buffer,
         file.mimetype,
+        user,
         location,
       );
-    } else {
-      source = body.imageUrl ?? '';
-      result = await this.aiService.analyzeImageFromUrl(
-        body.imageUrl ?? '',
-        location,
-      );
+      return { source: file.originalname, ...result };
     }
 
-    return { source, ...result };
+    const result = await this.aiService.analyzeImageFromUrl(
+      body.imageUrl,
+      location,
+      user,
+    );
+
+    return { source: body.imageUrl, ...result };
   }
 
   @Get(':id/stats')

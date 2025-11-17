@@ -24,7 +24,9 @@ import { ModesService } from '../modes/modes.service';
 export class GeminiIaService {
   private readonly logger = new Logger(GeminiIaService.name);
   private genIA: GoogleGenerativeAI;
-  private modelIA = 'gemini-2.0-flash';
+  //private modelIA = 'gemini-2.0-flash';
+  //private modelIA = 'gemini-2.5-pro';
+  private modelIA = 'gemini-2.5-flash';
 
   constructor(
     private readonly configService: ConfigService,
@@ -54,11 +56,22 @@ export class GeminiIaService {
     this.genIA = new GoogleGenerativeAI(apiKey);
   }
 
-  async analyzeText(prompt: string, location?: UserLocationDto) {
-    const input = await this.inputRepo.save({ type: 'text', query: prompt });
+  async analyzeText(
+    prompt: string,
+    user: { id: number },
+    location?: UserLocationDto,
+  ) {
+    const input = await this.inputRepo.save({
+      type: 'text',
+      query: prompt,
+      user: { id: user.id },
+      location_lat: location?.lat ?? null,
+      location_lng: location?.lng ?? null,
+    });
 
     try {
       const materials = await this.extractMaterialsFromPrompt(prompt);
+
       if (!materials.length) {
         return this.saveAndReturn(
           input,
@@ -79,10 +92,6 @@ export class GeminiIaService {
           materials,
           available: stores.length > 0,
           stores: stores.length > 0 ? stores : [],
-          message:
-            stores.length === 0
-              ? `No hay tiendas con ${materials.join(', ')}`
-              : undefined,
         },
         true,
       );
@@ -92,14 +101,25 @@ export class GeminiIaService {
     }
   }
 
-  async analyzeImage(buffer: Buffer, mime: string, location?: UserLocationDto) {
+  async analyzeImage(
+    buffer: Buffer,
+    mime: string,
+    user: { id: number },
+    location?: UserLocationDto,
+  ) {
     const imageUrl = await this.supabaseService.uploadImage(
       buffer,
       `analyze-${Date.now()}.${mime.split('/')[1]}`,
       mime,
     );
 
-    const input = await this.inputRepo.save({ type: 'image', query: imageUrl });
+    const input = await this.inputRepo.save({
+      type: 'image',
+      query: imageUrl,
+      user: { id: user.id },
+      location_lat: location?.lat ?? null,
+      location_lng: location?.lng ?? null,
+    });
 
     try {
       const base64 = buffer.toString('base64');
@@ -128,10 +148,6 @@ export class GeminiIaService {
           materials,
           available: stores.length > 0,
           stores: stores.length > 0 ? stores : [],
-          message:
-            stores.length === 0
-              ? `No hay tiendas con ${materials.join(', ')}`
-              : undefined,
         },
         true,
       );
@@ -141,16 +157,35 @@ export class GeminiIaService {
     }
   }
 
-  async analyzeImageFromUrl(url: string, location?: UserLocationDto) {
+  async analyzeImageFromUrl(
+    url: string,
+    location?: UserLocationDto,
+    user?: any,
+  ) {
     try {
-      const response = await axios.get(url, { responseType: 'arraybuffer' });
-      const buffer = Buffer.from(response.data);
-      const mime = url.endsWith('png') ? 'image/png' : 'image/jpeg';
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        validateStatus: () => true,
+      });
 
-      return this.analyzeImage(buffer, mime, location);
+      if (response.status >= 400) {
+        throw new Error(`URL respondió ${response.status}`);
+      }
+
+      const mime = response.headers['content-type'];
+
+      if (!mime || !mime.startsWith('image/')) {
+        throw new Error(
+          `El URL no contiene una imagen válida. MIME recibido: ${mime}`,
+        );
+      }
+
+      const buffer = Buffer.from(response.data);
+
+      return this.analyzeImage(buffer, mime, user, location);
     } catch (error) {
       this.logger.error('Error leyendo imagen desde URL', error);
-      throw new Error('Fallo al analizar imagen desde URL');
+      throw new Error(`Fallo al analizar imagen desde URL: ${error.message}`);
     }
   }
 
