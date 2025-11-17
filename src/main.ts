@@ -9,15 +9,21 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { json, raw } from 'body-parser';
 
 async function bootstrap() {
-  // Desactivamos bodyParser global
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
 
-  // 1. RAW BODY SOLO para Stripe Webhook
-  app.use('/stripe/webhook', raw({ type: '*/*' }));
+  // RAW solo para Stripe, y ASIGNAR req.rawBody
+  app.use(
+    '/stripe/webhook',
+    raw({ type: 'application/json' }),
+    (req: any, res, next) => {
+      req.rawBody = req.body;
+      next();
+    },
+  );
 
-  // 2. JSON BODY NORMAL para todo lo demás
+  // JSON para el resto
   app.use(json({ limit: '100mb' }));
 
   app.enableCors({
@@ -28,7 +34,6 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
-    forbidNonWhitelisted: false,
     transform: true,
     transformOptions: { enableImplicitConversion: true }
   }));
