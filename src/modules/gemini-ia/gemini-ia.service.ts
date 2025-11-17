@@ -192,6 +192,7 @@ export class GeminiIaService {
   async analyzeStorePerformance(storeId: number) {
     if (!storeId) throw new BadRequestException('StoreId es requerido');
 
+    // OBTENER SOLO VENTAS (YA NO TRAEMOS GLOBAL NI STOCK)
     const sales = await this.posSaleRepo
       .createQueryBuilder('s')
       .select([
@@ -204,39 +205,61 @@ export class GeminiIaService {
       .orderBy('totalQty', 'DESC')
       .getRawMany();
 
-    const global = await this.posSaleRepo
-      .createQueryBuilder('s')
-      .select([
-        's.productName AS productName',
-        'AVG(s.quantity) AS avgQty',
-        'AVG(s.total) AS avgRevenue',
-      ])
-      .groupBy('s.productName')
-      .getRawMany();
+    // CALCULAR TOP 3 Y LOW 3
+    const sorted = sales
+      .map((p) => ({
+        productName: p.productname ?? p.productName,
+        totalQty: Number(p.totalqty ?? p.totalQty),
+        totalRevenue: Number(p.totalrevenue ?? p.totalRevenue),
+      }))
+      .sort((a, b) => b.totalQty - a.totalQty);
 
-    const stock = await this.posStockRepo.find({
-      where: { store: { id: storeId } },
-    });
+    const top3 = sorted.slice(0, 3);
+    const low3 = sorted.slice(-3).reverse();
 
+    // PREPARAR DATOS PARA IA
     const prompt = `
 Eres un analista experto en retail.
-Analiza estos datos de la tienda ID ${storeId}:
 
-VENTAS: ${JSON.stringify(sales)}
-PROMEDIO GLOBAL: ${JSON.stringify(global)}
-STOCK ACTUAL: ${JSON.stringify(stock)}
+Analiza los datos de la tienda ID ${storeId}.
 
-Devuelve JSON estricto con:
-- top_products
-- low_products
-- executive_summary
+VENTAS (solo productos de esta tienda):
+${JSON.stringify(sorted)}
+
+Debes devolver UN JSON VÁLIDO con esta estructura EXACTA:
+
+{
+  "top_products": [
+    { "name": "", "qty": 0, "revenue": 0 }
+  ],
+  "low_products": [
+    { "name": "", "qty": 0, "revenue": 0 }
+  ],
+  "executive_summary": "texto en español explicando la situación general",
+  "recommendations": "texto en español con recomendaciones simples de precios, stock o ajustes"
+}
+
+Reglas:
+- Responde SIEMPRE en español.
+- Usa EXCLUSIVAMENTE la información entregada.
+- "qty" se basa en totalQty.
+- "revenue" se basa en totalRevenue.
+- Si hay menos de 3 productos, devuelve solo los disponibles.
+- Nada de texto fuera del JSON, solo response con el JSON directo.
 `;
 
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 
-    return { data: { sales, global, stock }, ai: text };
+    return {
+      data: {
+        top_products: top3,
+        low_products: low3,
+        sales_total: sorted.reduce((acc, p) => acc + p.totalRevenue, 0),
+      },
+      ai: text,
+    };
   }
 
   private async getUserMode(location?: UserLocationDto) {

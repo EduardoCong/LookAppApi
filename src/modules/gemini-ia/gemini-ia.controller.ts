@@ -81,7 +81,7 @@ export class GeminiIaController {
       location,
     );
 
-    return { source: file.originalname, ...result };
+    return result;
   }
 
   @Post('imagen')
