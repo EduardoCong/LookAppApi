@@ -135,4 +135,9 @@ export class WebStoresController {
     ) {
         return this.paymentsService.getPaymentsByStore(storeId);
     }
+
+    @Get('summary')
+    async getPaymentsSummary() {
+        return this.paymentsService.getPaymentsSummary();
+    }
 }
