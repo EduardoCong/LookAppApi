@@ -124,20 +124,22 @@ export class GeminiIaService {
     try {
       const base64 = buffer.toString('base64');
       const materials = await this.extractMaterialsFromImage(base64, mime);
+      const stores = await this.resolveStoresForMaterials(materials, location);
+      const modeInfo = await this.getUserMode(location);
 
       if (!materials.length) {
         return this.saveAndReturn(
           input,
           {
-            success: false,
-            message: 'No se identificaron materiales en la imagen.',
+            mode: modeInfo.mode,
+            distance: modeInfo.distance,
+            materials: materials.length > 0 ? materials : 'No se identificaron materiales.',
+            available: stores.length > 0,
+            stores: stores.length > 0 ? stores : 'No hay tiendas con disponibilidad de este producto.',
           },
           false,
         );
       }
-
-      const stores = await this.resolveStoresForMaterials(materials, location);
-      const modeInfo = await this.getUserMode(location);
 
       return this.saveAndReturn(
         input,
@@ -145,9 +147,9 @@ export class GeminiIaService {
           mode: modeInfo.mode,
           distance: modeInfo.distance,
           success: true,
-          materials,
+          materials: materials.length > 0 ? materials : 'No se identificaron materiales.',
           available: stores.length > 0,
-          stores: stores.length > 0 ? stores : [],
+          stores: stores.length > 0 ? stores : 'No hay tiendas con disponibilidad de este producto.',
         },
         true,
       );
