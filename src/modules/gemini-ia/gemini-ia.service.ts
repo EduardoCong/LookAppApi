@@ -421,8 +421,8 @@ Reglas:
     if (normalizedMaterials.length === 0) return [];
 
     const found = store.products.filter((p) => {
-      const name = this.normalize(p.name);
-      return normalizedMaterials.some((m) => name.includes(m));
+      const normalizedProductName = this.normalize(p.name);
+      return normalizedMaterials.some((m) => normalizedProductName.includes(m));
     });
 
     return found.map((p) => ({
