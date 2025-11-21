@@ -25,8 +25,8 @@ export class GeminiIaService {
   private readonly logger = new Logger(GeminiIaService.name);
   private genIA: GoogleGenerativeAI;
   //private modelIA = 'gemini-2.0-flash';
-  //private modelIA = 'gemini-2.5-pro';
-  private modelIA = 'gemini-2.5-flash';
+  private modelIA = 'gemini-2.5-pro';
+  //private modelIA = 'gemini-2.5-flash';
 
   constructor(
     private readonly configService: ConfigService,
@@ -133,9 +133,15 @@ export class GeminiIaService {
           {
             mode: modeInfo.mode,
             distance: modeInfo.distance,
-            materials: materials.length > 0 ? materials : 'No se identificaron materiales.',
+            materials:
+              materials.length > 0
+                ? materials
+                : 'No se identificaron materiales.',
             available: stores.length > 0,
-            stores: stores.length > 0 ? stores : 'No hay tiendas con disponibilidad de este producto.',
+            stores:
+              stores.length > 0
+                ? stores
+                : 'No hay tiendas con disponibilidad de este producto.',
           },
           false,
         );
@@ -147,9 +153,15 @@ export class GeminiIaService {
           mode: modeInfo.mode,
           distance: modeInfo.distance,
           success: true,
-          materials: materials.length > 0 ? materials : 'No se identificaron materiales.',
+          materials:
+            materials.length > 0
+              ? materials
+              : 'No se identificaron materiales.',
           available: stores.length > 0,
-          stores: stores.length > 0 ? stores : 'No hay tiendas con disponibilidad de este producto.',
+          stores:
+            stores.length > 0
+              ? stores
+              : 'No hay tiendas con disponibilidad de este producto.',
         },
         true,
       );
@@ -194,7 +206,6 @@ export class GeminiIaService {
   async analyzeStorePerformance(storeId: number) {
     if (!storeId) throw new BadRequestException('StoreId es requerido');
 
-    // OBTENER SOLO VENTAS (YA NO TRAEMOS GLOBAL NI STOCK)
     const sales = await this.posSaleRepo
       .createQueryBuilder('s')
       .select([
@@ -207,7 +218,6 @@ export class GeminiIaService {
       .orderBy('totalQty', 'DESC')
       .getRawMany();
 
-    // CALCULAR TOP 3 Y LOW 3
     const sorted = sales
       .map((p) => ({
         productName: p.productname ?? p.productName,
@@ -219,7 +229,6 @@ export class GeminiIaService {
     const top3 = sorted.slice(0, 3);
     const low3 = sorted.slice(-3).reverse();
 
-    // PREPARAR DATOS PARA IA
     const prompt = `
 Eres un analista experto en retail.
 
@@ -337,7 +346,7 @@ Reglas:
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
 
     const result = await model.generateContent(`
-    Extrae SOLO el nombre del producto principal del siguiente texto:
+    Extrae TODOS los productos del siguiente texto:
     "${prompt}"
 
     Devuelve JSON ARRAY válido:
@@ -351,11 +360,17 @@ Reglas:
     const model = this.genIA.getGenerativeModel({ model: this.modelIA });
 
     const result = await model.generateContent([
-      { text: `Devuelve JSON array con productos detectados.` },
+      {
+        text: `Extrae TODOS los productos de la siguiente imagen.
+        Devuelve JSON ARRAY válido: ["Audifonos", "Airpods", "iPhone 14 Pro", "Macbook Pro"]
+        Daras todos los productos que puedas identificar en la imagen con su coincidencias, por ejemplo,
+        si sale unos Airpods, pon "Airpods" pero también "Audifonos inalámbricos", "Audifonos bluetooth", etc.`,
+      },
       { inlineData: { mimeType: mime, data: base64 } },
     ]);
 
-    return this.parseList(result.response.text());
+    const materials = this.parseList(result.response.text());
+    return materials;
   }
 
   private parseList(text: string): string[] {
