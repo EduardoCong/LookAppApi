@@ -441,6 +441,7 @@ Reglas:
     });
 
     return found.map((p) => ({
+      id: p.id,
       name: p.name,
       price: p.price,
       stock: p.stock,
