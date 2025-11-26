@@ -10,7 +10,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-  ) {}
+  ) { }
 
   async create(dto: CreateUserDto): Promise<User> {
     const hashed = await bcrypt.hash(dto.password, 10);
@@ -68,4 +68,17 @@ export class UsersService {
     }
     await this.userRepo.remove(user);
   }
+
+  async updatePasswordByEmail(email: string, newHashedPassword: string) {
+    const user = await this.userRepo.findOne({ where: { email } });
+
+    if (!user) {
+      throw new NotFoundException(`El usuario con email ${email} no existe`);
+    }
+
+    user.password = newHashedPassword;
+
+    return this.userRepo.save(user);
+  }
+
 }
