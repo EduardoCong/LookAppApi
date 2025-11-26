@@ -1,5 +1,6 @@
+import { CartItem } from 'src/modules/Cart/Entities/cart-item.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
-import { Entity, PrimaryGeneratedColumn, Column, OneToOne, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToOne, CreateDateColumn, OneToMany } from 'typeorm';
 
 
 export enum UserRole {
@@ -43,4 +44,8 @@ export class User {
 
     @Column({ nullable: true })
     stripe_customer_id?: string;
+
+    @OneToMany(() => CartItem, cart => cart.user)
+    cartItems: CartItem[];
+
 }

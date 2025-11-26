@@ -11,7 +11,7 @@ import {
     Patch,
     Query,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { AiHistoryService } from './History/history.service';
@@ -19,6 +19,7 @@ import type { Request } from 'express';
 import { StoresService } from '../stores/stores.service';
 import { PurchasesFullService } from './Purchases/purchases-full.service';
 import { PurchaseApartadoService } from './Purchases/purchase-apartado.service';
+import { PurchaseFisicoService } from './Purchases/purchase-fisico.service';
 
 @ApiTags('APP / Mobile')
 @Controller('app')
@@ -424,7 +425,6 @@ y registra la operación como "apartado".`,
 
         return { ok: true, data };
     }
-
 
 
 }

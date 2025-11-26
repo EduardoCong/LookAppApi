@@ -22,6 +22,8 @@ import { RecoveryPasswordModule } from './modules/recovery-password/recovery-pas
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { join } from 'path';
+import { CartModule } from './modules/Cart/cart.module';
+import { PurchaseHistoryAppModule } from './modules/PurchaseHistoryMovil/purchase-history.module';
 
 
 @Module({
@@ -77,6 +79,8 @@ import { join } from 'path';
     ModesModule,
     StripeWebhookModule,
     RecoveryPasswordModule,
+    CartModule,
+    PurchaseHistoryAppModule
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],

@@ -19,13 +19,15 @@ import { PurchaseFull } from 'src/modules/app/Purchases/entities/purchase-full.e
 import { PurchaseApartado } from 'src/modules/app/Purchases/entities/purchase-apartado.entity';
 import { PurchaseApartadoService } from 'src/modules/app/Purchases/purchase-apartado.service';
 import { StoreSubscriptionPayment } from 'src/modules/stores/entities/store-subscription-payment.entity';
+import { PurchaseFisicoService } from 'src/modules/app/Purchases/purchase-fisico.service';
+import { PurchaseFisico } from 'src/modules/Cart/Entities/purchase-fisico.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User, Category, PurchaseFull, PurchaseApartado, StoreSubscriptionPayment]),
+        TypeOrmModule.forFeature([PosSale, PosStock, Product, Store, StoreSubscription, StoreDetail, User, Category, PurchaseFull, PurchaseApartado, StoreSubscriptionPayment, PurchaseFisico]),
     ],
     controllers: [StoreStatsController],
-    providers: [StoreStatsService, WebStoresService, StoresService, StoreReportsService, PurchasesFullService, PurchaseApartadoService],
-    exports: [StoreStatsService, WebStoresService, StoresService, StoreReportsService, PurchasesFullService, PurchaseApartadoService],
+    providers: [StoreStatsService, WebStoresService, StoresService, StoreReportsService, PurchasesFullService, PurchaseApartadoService, PurchaseFisicoService],
+    exports: [StoreStatsService, WebStoresService, StoresService, StoreReportsService, PurchasesFullService, PurchaseApartadoService, PurchaseFisicoService],
 })
 export class StoreStatsModule { }

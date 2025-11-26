@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { StoreStatsService } from './stats.service';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
@@ -10,6 +10,7 @@ import { Public } from 'src/common/decorators/public.decorator';
 import { StoreReportsService } from '../reports/store-reports.service';
 import { PurchasesFullService } from 'src/modules/app/Purchases/purchases-full.service';
 import { PurchaseApartadoService } from 'src/modules/app/Purchases/purchase-apartado.service';
+import { PurchaseFisicoService } from 'src/modules/app/Purchases/purchase-fisico.service';
 
 @Controller('web/stores')
 @ApiTags('WEB / Admin Store')
@@ -22,7 +23,8 @@ export class StoreStatsController {
         private readonly service: WebStoresService,
         private readonly reportsService: StoreReportsService,
         private readonly purchasesFullService: PurchasesFullService,
-        private readonly purchaseApartadoService: PurchaseApartadoService
+        private readonly purchaseApartadoService: PurchaseApartadoService,
+        private readonly fisicoService: PurchaseFisicoService
     ) {
         const secret = this.configService.get<string>('JWT_SECRET');
         if (!secret) {
@@ -657,6 +659,123 @@ Realiza prorrateo automático según la configuración de Stripe.
             );
         }
     }
+
+    @Post('listar')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Listar compras físicas del usuario',
+        description: 'Puedes filtrar por estatus: pendiente | recogido | vencido.',
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                status: {
+                    type: 'string',
+                    enum: ['pendiente', 'recogido', 'vencido'],
+                    example: 'pendiente',
+                },
+            },
+        },
+    })
+    async listarFisicos(
+        @Req() req: Request,
+        @Body() body: { status?: 'pendiente' | 'recogido' | 'vencido' },
+    ) {
+        const token = req.headers.authorization?.replace('Bearer ', '').trim();
+        if (!token) throw new BadRequestException('Token requerido');
+
+        const decoded: any = jwt.verify(token, this.jwtSecret);
+        const userId = decoded.sub;
+
+        if (!userId)
+            throw new BadRequestException('Token inválido: no contiene ID de usuario');
+
+        return this.fisicoService.getFisicosByStatus(userId, body.status);
+    }
+
+    // ============================================================================
+    // 2) OBTENER DETALLE DE UNA COMPRA FÍSICA
+    // ============================================================================
+    @Post('detalle')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Obtener detalles de una compra física',
+        description: 'Requiere el ID de la compra física.',
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['fisico_id'],
+            properties: {
+                fisico_id: { type: 'number', example: 45 },
+            },
+        },
+    })
+    async getFisicoById(
+        @Req() req: Request,
+        @Body() body: { fisico_id: number },
+    ) {
+        const token = req.headers.authorization?.replace('Bearer ', '').trim();
+        if (!token) throw new BadRequestException('Token requerido');
+
+        const decoded: any = jwt.verify(token, this.jwtSecret);
+        const userId = decoded.sub;
+
+        if (!userId)
+            throw new BadRequestException('Token inválido: no contiene ID de usuario');
+
+        if (!body.fisico_id)
+            throw new BadRequestException('fisico_id es requerido');
+
+        return this.fisicoService.getFisicoById(userId, body.fisico_id);
+    }
+
+    // ============================================================================
+    // 3) MARCAR COMO RECOGIDO (MISMO ESTILO EXACTO QUE APARTADOS)
+    // ============================================================================
+    @Post('recoger')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Marcar compra física como recogida',
+        description: `
+Solo puede marcarse como recogida si:
+- Pertenece al usuario
+- No está vencida
+- No está previamente recogida`,
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['fisico_id'],
+            properties: {
+                fisico_id: { type: 'number', example: 12 },
+            },
+        },
+    })
+    @ApiResponse({ status: 200, description: 'Compra marcada como recogida' })
+    async marcarFisicoComoRecogido(
+        @Req() req: Request,
+        @Body() body: { fisico_id: number },
+    ) {
+        const token = req.headers.authorization?.replace('Bearer ', '').trim();
+        if (!token) throw new BadRequestException('Token requerido');
+
+        const decoded: any = jwt.verify(token, this.jwtSecret);
+        const userId = decoded.sub;
+
+        if (!userId)
+            throw new BadRequestException('Token inválido: no contiene ID de usuario');
+
+        if (!body.fisico_id)
+            throw new BadRequestException('fisico_id es requerido');
+
+        return this.fisicoService.marcarComoRecogido(
+            userId,
+            body.fisico_id,
+        );
+    }
+
 
 }
 

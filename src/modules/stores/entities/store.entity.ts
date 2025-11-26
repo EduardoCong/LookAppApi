@@ -15,6 +15,7 @@ import { StoreReviewLog } from 'src/modules/web-admin/stores/entities/store-revi
 import { StoreSubscription } from './store-subscription.entity';
 import { PosStock } from './pos_stock.entity';
 import { PosSale } from './pos_sale.entity';
+import { CartItem } from 'src/modules/Cart/Entities/cart-item.entity';
 
 export enum StoreStatus {
   PENDING = 'pending',
@@ -83,4 +84,8 @@ export class Store {
 
   @OneToMany(() => PosSale, (posSales) => posSales.store)
   posSales: PosSale[];
+
+  @OneToMany(() => CartItem, cart => cart.store)
+  cartItems: CartItem[];
+
 }

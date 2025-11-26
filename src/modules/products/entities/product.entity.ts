@@ -5,11 +5,13 @@ import {
     ManyToOne,
     CreateDateColumn,
     JoinColumn,
+    OneToMany,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
 import { ProductCategory } from 'src/modules/product-categories/entities/product-category.entity';
 import { Store } from 'src/modules/stores/entities/store.entity';
+import { CartItem } from 'src/modules/Cart/Entities/cart-item.entity';
 
 @Entity('products')
 export class Product {
@@ -69,4 +71,8 @@ export class Product {
     })
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
+
+    @OneToMany(() => CartItem, cart => cart.product)
+    cartItems: CartItem[];
+
 }
