@@ -426,5 +426,22 @@ y registra la operación como "apartado".`,
         return { ok: true, data };
     }
 
+    @Get('mine')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Obtener información de usuario',
+        description: 'Devuelve toda la información del usuario autenticado.',
+    })
+    async getUserInfo(@Req() req: Request) {
+        const token = req.headers.authorization?.replace('Bearer ', '').trim();
+        if (!token) throw new BadRequestException('Token requerido');
+
+        const decoded: any = jwt.verify(token, this.jwtSecret);
+        const userId = decoded.sub;
+
+        const user = await this.historyService.getMe(userId);
+
+        return { ok: true, data: user };
+    }
 
 }

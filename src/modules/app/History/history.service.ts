@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiSearchInput } from './entities/ai_search_input.entity';
 import { AiSearchOutput } from './entities/ai_search_output.entity';
+import { User } from '../../users/entities/user.entity';
 
 
 @Injectable()
@@ -13,6 +14,9 @@ export class AiHistoryService {
 
         @InjectRepository(AiSearchOutput)
         private readonly outputRepo: Repository<AiSearchOutput>,
+
+        @InjectRepository(User)
+        private readonly userRepo: Repository<User>,
     ) { }
 
     async getUserInputs(userId: number) {
@@ -65,5 +69,21 @@ export class AiHistoryService {
                 created_at: o.created_at,
             })),
         };
+    }
+
+    async getMe(userId: number) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            relations: [
+                'store',
+            ],
+        });
+
+        if (!user) {
+            throw new NotFoundException('Usuario no encontrado');
+        }
+
+
+        return user;
     }
 }
