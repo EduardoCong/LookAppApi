@@ -5,9 +5,6 @@ import {
   DISTANCE_STORE_MODE,
 } from 'src/config/constats';
 import { UserLocationDto } from './dto/user.location';
-import { Repository } from 'typeorm';
-import { Store } from '../stores/entities/store.entity';
-import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class ModesService {
@@ -16,9 +13,6 @@ export class ModesService {
 
   constructor(
     private readonly storesService: StoresService,
-
-    @InjectRepository(Store)
-    private readonly storeRepo: Repository<Store>,
   ) {}
 
   async detectMode(location: UserLocationDto) {

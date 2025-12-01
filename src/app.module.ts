@@ -19,11 +19,10 @@ import { AppMobileModule } from './modules/app/app.module';
 import { ModesModule } from './modules/modes/modes.module';
 import { StripeWebhookModule } from './modules/web/stripe/stripe-webhook.module';
 import { RecoveryPasswordModule } from './modules/recovery-password/recovery-password.module';
-import { MailerModule } from '@nestjs-modules/mailer';
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { join } from 'path';
 import { CartModule } from './modules/Cart/cart.module';
 import { PurchaseHistoryAppModule } from './modules/PurchaseHistoryMovil/purchase-history.module';
+import { PurchasesModule } from './purchases/purchases.module';
 
 
 @Module({
@@ -31,30 +30,6 @@ import { PurchaseHistoryAppModule } from './modules/PurchaseHistoryMovil/purchas
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    MailerModule.forRoot({
-      transport: {
-        host: process.env.MAIL_HOST,
-        port: Number(process.env.MAIL_PORT),
-        secure: false,  // ← IMPORTANTÍSIMO con 587
-        auth: {
-          user: process.env.MAIL_USERNAME,
-          pass: process.env.MAIL_PASSWORD,
-        },
-      },
-
-      defaults: {
-        from: '"Nublink" <no-reply@nublink.com>',
-      },
-      template: {
-        dir: join(__dirname, '../mail/templates'),
-        adapter: new HandlebarsAdapter(),
-        options: {
-          strict: true,
-        },
-      },
-
-    }),
-
     // Conexión a Neon PostgreSQL
     TypeOrmModule.forRoot({
       type: 'postgres',
@@ -80,7 +55,8 @@ import { PurchaseHistoryAppModule } from './modules/PurchaseHistoryMovil/purchas
     StripeWebhookModule,
     RecoveryPasswordModule,
     CartModule,
-    PurchaseHistoryAppModule
+    PurchaseHistoryAppModule,
+    PurchasesModule
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],

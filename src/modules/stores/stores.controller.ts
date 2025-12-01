@@ -177,5 +177,4 @@ export class StoresWebController {
             data: detail,
         };
     }
-
 }

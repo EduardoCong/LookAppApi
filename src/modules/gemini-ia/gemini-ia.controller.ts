@@ -10,12 +10,12 @@ import {
   Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { GeminiIaService } from './gemini-ia.service';
 import { memoryStorage } from 'multer';
 import { AnalizeTextDto } from './dto/analizeText.dto';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
+import { GeminiIaService } from './gemini-ia.service';
 
 @Controller('analyze')
 export class GeminiIaController {
@@ -131,11 +131,5 @@ export class GeminiIaController {
     );
 
     return { source: body.imageUrl, ...result };
-  }
-
-  @Get(':id/stats')
-  async getStoreStats(@Param('id') id: string) {
-    const storeId = parseInt(id, 10);
-    return await this.aiService.analyzeStorePerformance(storeId);
   }
 }

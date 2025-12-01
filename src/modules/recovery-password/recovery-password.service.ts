@@ -7,7 +7,6 @@ import { PasswordResetToken } from './entities/password-reset.entity';
 import { RequestResetDto } from './dto/request-reset.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
 import { UsersService } from '../users/users.service';
-import { MailerService } from '@nestjs-modules/mailer';
 
 
 @Injectable()
@@ -17,7 +16,6 @@ export class RecoveryPasswordService {
         private tokenRepo: Repository<PasswordResetToken>,
 
         private usersService: UsersService,
-        private mailerService: MailerService,
     ) { }
 
     private generateCode(): string {
@@ -32,13 +30,6 @@ export class RecoveryPasswordService {
         const expires_at = new Date(Date.now() + 1000 * 60 * 10);
 
         await this.tokenRepo.save({ email, token, expires_at });
-
-        await this.mailerService.sendMail({
-            to: email,
-            subject: 'Código para recuperar tu contraseña',
-            template: './reset-code',
-            context: { code: token, name: user.name },
-        });
 
         return { message: 'Código enviado a tu correo' };
     }
@@ -66,16 +57,6 @@ export class RecoveryPasswordService {
         const hashed = await bcrypt.hash(newPassword, 10);
 
         await this.usersService.updatePasswordByEmail(user.email, hashed);
-
-        await this.mailerService.sendMail({
-            to: user.email,
-            subject: 'Tu contraseña ha sido restablecida por el administrador',
-            template: './admin-reset-password',
-            context: {
-                name: user.name,
-                password: newPassword,
-            },
-        });
 
         return { message: 'Contraseña restablecida y correo enviado' };
     }

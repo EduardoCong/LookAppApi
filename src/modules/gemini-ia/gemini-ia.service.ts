@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
+import { stringSimilarity  } from 'string-similarity-js';
 
 import { Store } from '../stores/entities/store.entity';
 import { PosStock } from '../stores/entities/pos_stock.entity';
@@ -17,6 +18,7 @@ import { StoresService } from '../stores/stores.service';
 import {
   DISTANCE_NEARBY_STORES,
   DISTANCE_STORE_MODE,
+  SIMILARITY
 } from 'src/config/constats';
 import { ModesService } from '../modes/modes.service';
 
@@ -203,76 +205,6 @@ export class GeminiIaService {
     }
   }
 
-  async analyzeStorePerformance(storeId: number) {
-    if (!storeId) throw new BadRequestException('StoreId es requerido');
-
-    const sales = await this.posSaleRepo
-      .createQueryBuilder('s')
-      .select([
-        's.productName AS productName',
-        'SUM(s.quantity) AS totalQty',
-        'SUM(s.total) AS totalRevenue',
-      ])
-      .where('s.storeId = :storeId', { storeId })
-      .groupBy('s.productName')
-      .orderBy('totalQty', 'DESC')
-      .getRawMany();
-
-    const sorted = sales
-      .map((p) => ({
-        productName: p.productname ?? p.productName,
-        totalQty: Number(p.totalqty ?? p.totalQty),
-        totalRevenue: Number(p.totalrevenue ?? p.totalRevenue),
-      }))
-      .sort((a, b) => b.totalQty - a.totalQty);
-
-    const top3 = sorted.slice(0, 3);
-    const low3 = sorted.slice(-3).reverse();
-
-    const prompt = `
-Eres un analista experto en retail.
-
-Analiza los datos de la tienda ID ${storeId}.
-
-VENTAS (solo productos de esta tienda):
-${JSON.stringify(sorted)}
-
-Debes devolver UN JSON VÁLIDO con esta estructura EXACTA:
-
-{
-  "top_products": [
-    { "name": "", "qty": 0, "revenue": 0 }
-  ],
-  "low_products": [
-    { "name": "", "qty": 0, "revenue": 0 }
-  ],
-  "executive_summary": "texto en español explicando la situación general",
-  "recommendations": "texto en español con recomendaciones simples de precios, stock o ajustes"
-}
-
-Reglas:
-- Responde SIEMPRE en español.
-- Usa EXCLUSIVAMENTE la información entregada.
-- "qty" se basa en totalQty.
-- "revenue" se basa en totalRevenue.
-- Si hay menos de 3 productos, devuelve solo los disponibles.
-- Nada de texto fuera del JSON, solo response con el JSON directo.
-`;
-
-    const model = this.genIA.getGenerativeModel({ model: this.modelIA });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-
-    return {
-      data: {
-        top_products: top3,
-        low_products: low3,
-        sales_total: sorted.reduce((acc, p) => acc + p.totalRevenue, 0),
-      },
-      ai: text,
-    };
-  }
-
   private async getUserMode(location?: UserLocationDto) {
     if (!location?.lat || !location?.lng) {
       return { mode: 'general', distance: null };
@@ -419,14 +351,23 @@ Reglas:
     return response;
   }
 
-  private normalize(text: any) {
+  private normalize(text: any): string {
     if (typeof text !== 'string') return '';
+
     return text
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
+      .replace(/0/g, 'o')
+      .replace(/1/g, 'i')
+      .replace(/3/g, 'e')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\b(\w{1,2})\b/g, '')
+      .replace(/\s+/g, ' ')
       .trim();
   }
+
 
   private filterProductsInStore(materials: string[], store: Store) {
     const normalizedMaterials = materials
@@ -437,7 +378,12 @@ Reglas:
 
     const found = store.products.filter((p) => {
       const normalizedProductName = this.normalize(p.name);
-      return normalizedMaterials.some((m) => normalizedProductName.includes(m));
+      return normalizedMaterials.some((m) => {
+        const similar = stringSimilarity(m, normalizedProductName);
+
+        const includes = normalizedProductName.includes(m);
+        return includes || similar >= SIMILARITY;
+      });
     });
 
     return found.map((p) => ({

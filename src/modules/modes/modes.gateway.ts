@@ -19,7 +19,7 @@ export class ModesGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private socketUserMap = new Map<string, string | null>();
 
-  constructor(private readonly modesService: ModesService) {}
+  constructor(private readonly modesService: ModesService) { }
 
   handleConnection(client: Socket) {
     this.socketUserMap.set(client.id, null);
@@ -30,13 +30,17 @@ export class ModesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('userLocation')
-  @UsePipes(new ValidationPipe({ transform: true}))
+  @UsePipes(new ValidationPipe({ transform: true }))
   async handleUserLocation(
     @MessageBody() payload: UserLocationDto,
     @ConnectedSocket() client: Socket,
   ) {
+    const previousMode = this.socketUserMap.get(client.id);
     const result = await this.modesService.detectMode(payload);
-    client.emit('modeChange', result);
-    console.log(result);
+    if (previousMode !== result.mode) {
+      client.emit('modeChange', result);
+      this.socketUserMap.set(client.id, result.mode);
+      console.log(result);
+    }
   }
 }
