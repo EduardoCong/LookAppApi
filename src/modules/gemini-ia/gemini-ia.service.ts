@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { stringSimilarity  } from 'string-similarity-js';
+import { stringSimilarity } from 'string-similarity-js';
 
 import { Store } from '../stores/entities/store.entity';
 import { PosStock } from '../stores/entities/pos_stock.entity';
@@ -76,9 +76,18 @@ export class GeminiIaService {
       const materials = await this.extractMaterialsFromPrompt(prompt);
 
       if (!materials.length) {
+        const modeInfo = await this.getUserMode(location);
+
         return this.saveAndReturn(
           input,
-          { success: false, message: 'No se identificaron materiales.' },
+          {
+            ...modeInfo,
+            success: false,
+            message: 'No se identificaron materiales.',
+            materials: [],
+            available: false,
+            stores: [],
+          },
           false,
         );
       }
@@ -89,8 +98,7 @@ export class GeminiIaService {
       return this.saveAndReturn(
         input,
         {
-          mode: modeInfo.mode,
-          distance: modeInfo.distance,
+          ...modeInfo,
           success: true,
           materials,
           available: stores.length > 0,
@@ -103,7 +111,6 @@ export class GeminiIaService {
       throw new Error('Error al analizar texto');
     }
   }
-
   async analyzeImage(
     buffer: Buffer,
     mime: string,
@@ -130,49 +137,23 @@ export class GeminiIaService {
       const stores = await this.resolveStoresForMaterials(materials, location);
       const modeInfo = await this.getUserMode(location);
 
-      if (!materials.length) {
-        return this.saveAndReturn(
-          input,
-          {
-            mode: modeInfo.mode,
-            distance: modeInfo.distance,
-            materials:
-              materials.length > 0
-                ? materials
-                : 'No se identificaron materiales.',
-            available: stores.length > 0,
-            stores:
-              stores.length > 0
-                ? stores
-                : 'No hay tiendas con disponibilidad de este producto.',
-          },
-          false,
-        );
-      }
-
       return this.saveAndReturn(
         input,
         {
-          mode: modeInfo.mode,
-          distance: modeInfo.distance,
-          success: true,
-          materials:
-            materials.length > 0
-              ? materials
-              : 'No se identificaron materiales.',
+          ...modeInfo,
+          success: materials.length > 0,
+          materials: materials.length > 0 ? materials : 'No se identificaron materiales.',
           available: stores.length > 0,
-          stores:
-            stores.length > 0
-              ? stores
-              : 'No hay tiendas con disponibilidad de este producto.',
+          stores: stores.length > 0 ? stores : [],
         },
-        true,
+        materials.length > 0,
       );
     } catch (error) {
       this.logger.error('Error al analizar imagen', error);
       throw new Error('Fallo al analizar imagen');
     }
   }
+
 
   async analyzeImageFromUrl(
     url: string,
