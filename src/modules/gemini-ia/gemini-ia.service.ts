@@ -21,6 +21,7 @@ import {
   SIMILARITY
 } from 'src/config/constats';
 import { ModesService } from '../modes/modes.service';
+import { ModeResponse } from '../stores/interfaces/store.interface';
 
 @Injectable()
 export class GeminiIaService {
@@ -205,9 +206,9 @@ export class GeminiIaService {
     }
   }
 
-  private async getUserMode(location?: UserLocationDto) {
+  private async getUserMode(location?: UserLocationDto): Promise<ModeResponse> {
     if (!location?.lat || !location?.lng) {
-      return { mode: 'general', distance: null };
+      return { mode: 'general', distance: null, stores: [] };
     }
 
     return this.modesService.detectMode(location);

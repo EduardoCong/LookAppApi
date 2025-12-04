@@ -5,6 +5,7 @@ import {
   DISTANCE_STORE_MODE,
 } from 'src/config/constats';
 import { UserLocationDto } from './dto/user.location';
+import { ModeResponse } from '../stores/interfaces/store.interface';
 
 @Injectable()
 export class ModesService {
@@ -13,9 +14,9 @@ export class ModesService {
 
   constructor(
     private readonly storesService: StoresService,
-  ) {}
+  ) { }
 
-  async detectMode(location: UserLocationDto) {
+  async detectMode(location: UserLocationDto): Promise<ModeResponse> {
     const storesNearby = await this.storesService.getNearestStores(
       location.lat,
       location.lng,
@@ -33,37 +34,21 @@ export class ModesService {
     }
 
     const distance = nearest.distance_meters;
-    const store = await this.storesService.findActiveById(nearest.id);
-
     if (distance <= this.storeRadius) {
       const fullStore = await this.storesService.findActiveById(nearest.id);
 
       return {
         mode: 'store',
+        distance,
         store_id: nearest.id,
-        store: {
-          id: fullStore.id,
-          business_name: fullStore.business_name,
-          owner_name: fullStore.owner_name,
-          address: fullStore.address,
-          latitude: fullStore.latitude,
-          longitude: fullStore.longitude,
-          category: fullStore.category,
-          detail: fullStore.detail,
-          products: fullStore.products.map((p) => ({
-            id: p.id,
-            name: p.name,
-            price: p.price,
-            stock: p.stock,
-            imageUrl: p.imageUrl,
-          })),
-        },
+        store: fullStore,
       };
     }
 
     const allStores = await this.storesService.findActive();
     return {
       mode: 'general',
+      distance,
       stores: allStores,
     };
   }
