@@ -169,7 +169,7 @@ En "Análisis Productos con Bajas Ventas" explica por qué cada producto se vend
 Habla en español y explica de manera clara.
 `;
 
-    const model = this.geminiIaService['genIA'].getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const model = this.geminiIaService['genIA'].getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     const aiText = result.response.text();
 
@@ -215,7 +215,7 @@ Si no hay productos, indica claramente "No hay productos para analizar".
 Habla en español y haz que las recomendaciones sean accionables y claras.
 `;
 
-    const model = this.geminiIaService['genIA'].getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const model = this.geminiIaService['genIA'].getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     const aiText = result.response.text();
 

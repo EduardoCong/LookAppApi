@@ -22,7 +22,7 @@ import { RecoveryPasswordModule } from './modules/recovery-password/recovery-pas
 import { join } from 'path';
 import { CartModule } from './modules/Cart/cart.module';
 import { PurchaseHistoryAppModule } from './modules/PurchaseHistoryMovil/purchase-history.module';
-import { PurchasesModule } from './purchases/purchases.module';
+import { PurchasesModule } from './modules/purchases/purchases.module';
 
 
 @Module({
